@@ -1,0 +1,13 @@
+# Law_RAG — host-side deps (lightweight, no torch; heavy ML runs in vLLM containers)
+pymupdf>=1.24         # PDF text extraction (fitz)
+python-docx>=1.1      # .docx extraction
+psycopg[binary]>=3.2  # Postgres driver
+pgvector>=0.3         # vector type adapter for psycopg
+openai>=1.40          # OpenAI-compatible client -> local vLLM endpoints
+python-dotenv>=1.0    # .env config
+tenacity>=8.5         # retry on transient embedding/db errors
+rich>=13.7            # nice CLI output
+tqdm>=4.66            # progress bars
+fastapi>=0.115        # local web API
+uvicorn>=0.30         # ASGI server
+python-multipart>=0.0.9  # file uploads

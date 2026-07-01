@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Law RAG — Document Knowledge Base</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <svg class="mark" viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
+        <path d="M12 3l8 3v2H4V6l8-3zm-6 7h2v7H6v-7zm5 0h2v7h-2v-7zm5 0h2v7h-2v-7zM4 19h16v2H4v-2z"
+              fill="currentColor"/>
+      </svg>
+      <div class="brand-text">
+        <span class="brand-name">Law&nbsp;RAG</span>
+        <span class="brand-sub">Private Legal Document Intelligence</span>
+      </div>
+    </div>
+    <div class="stats" id="stats">&nbsp;</div>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button class="tab active" data-view="search" role="tab">Find Documents</button>
+    <button class="tab" data-view="review" role="tab">Review a Contract</button>
+    <button class="tab" data-view="add" role="tab">Add to Library</button>
+  </nav>
+
+  <main class="container">
+    <!-- ===================== FIND DOCUMENTS ===================== -->
+    <section id="view-search" class="view active">
+      <form id="searchForm" class="search-box">
+        <input id="q" type="text" autocomplete="off"
+               placeholder="Search precedents, filings, contracts…  e.g. “employee stock incentive plan”">
+        <button type="submit" class="btn-primary">Search</button>
+      </form>
+
+      <div class="filters">
+        <label>Client <select id="f-client"><option value="">Any</option></select></label>
+        <label>Type <select id="f-doc_type"><option value="">Any</option></select></label>
+        <label>Attorney <select id="f-author"><option value="">Any</option></select></label>
+        <label class="toggle">
+          <input type="checkbox" id="f-rerank" checked> AI rerank
+        </label>
+      </div>
+
+      <div id="searchStatus" class="status"></div>
+      <div id="results" class="results"></div>
+    </section>
+
+    <!-- ===================== REVIEW A CONTRACT ===================== -->
+    <section id="view-review" class="view">
+      <div id="dropzone" class="dropzone">
+        <svg viewBox="0 0 24 24" width="40" height="40" aria-hidden="true">
+          <path d="M19 15v4H5v-4H3v6h18v-6h-2zM11 3v9.17l-2.59-2.58L7 11l5 5 5-5-1.41-1.41L13 12.17V3h-2z"
+                fill="currentColor"/>
+        </svg>
+        <p class="dz-title">Drag a contract here, or <span class="link">click to browse</span></p>
+        <p class="dz-sub">PDF or Word · analyzed locally · nothing is uploaded to the cloud</p>
+        <input id="fileInput" type="file" accept=".pdf,.docx" hidden>
+      </div>
+
+      <div id="reviewStatus" class="status"></div>
+      <div id="report" class="report"></div>
+    </section>
+
+    <!-- ===================== ADD TO LIBRARY ===================== -->
+    <section id="view-add" class="view">
+      <div id="addzone" class="dropzone">
+        <svg viewBox="0 0 24 24" width="40" height="40" aria-hidden="true">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm-1 7V3.5L18.5 9H13zM12 12v3H9v2h3v3h2v-3h3v-2h-3v-3h-2z"
+                fill="currentColor"/>
+        </svg>
+        <p class="dz-title">Drop files here to add them to the library, or <span class="link">browse</span></p>
+        <p class="dz-sub">PDF or Word · type, parties &amp; date are detected automatically · processed locally</p>
+        <input id="addInput" type="file" accept=".pdf,.docx" multiple hidden>
+      </div>
+
+      <div id="addStatus" class="status"></div>
+      <div id="addResults" class="results"></div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <span class="lock">🔒</span> Runs entirely on this machine. No document ever leaves this device.
+    &nbsp;·&nbsp; AI-assisted output — always verify against the source.
+  </footer>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

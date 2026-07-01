@@ -1,0 +1,124 @@
+# Law_RAG — Local Legal Document Knowledge Base
+
+A **fully local, private** document knowledge base for a law firm. No data leaves
+the machine — all parsing, embedding, and search run on this Jetson AGX Thor.
+
+**Phase 1 (this repo): find & retrieve.** Ingest PDF/Word documents with firm
+metadata, then search them with hybrid retrieval (semantic + keyword) and get
+**source citations**. No AI drafting — by design, matching the lawyers' comfort level.
+
+## Architecture
+
+```
+Host venv (lightweight, no torch)             Docker (reuses the box's CUDA stack)
+  parse PDF/Word (pymupdf, python-docx)         lawrag-db      Postgres + pgvector    :5434
+  chunk + metadata                     ──HTTP──▶ lawrag-embed   vLLM Qwen3-Embedding   :8010
+  hybrid search (vector + keyword, RRF)         lawrag-rerank  vLLM bge-reranker-v2-m3 :8011
+  cross-encoder rerank -> citations             lawrag-llm     vLLM Qwen3.6-35B 32k   :8012
+  due-diligence review (summarize + extract)
+```
+
+- **Storage:** one Postgres+pgvector DB holds vectors, keyword index (tsvector),
+  and metadata — semantic search, keyword search, and filtering in a single system.
+- **Retrieval (two stages):** (1) Reciprocal Rank Fusion of vector similarity +
+  full-text search produces a candidate pool; (2) a cross-encoder reranker re-scores
+  each (query, passage) pair for precise final ordering. Reranker auto-falls-back to
+  RRF order if unavailable; toggle with `RERANK_ENABLED` or `query.py --no-rerank`.
+- **Isolation:** `client` / `matter` metadata filters are the basis for ethical-wall
+  access control (a user's permitted scope becomes a mandatory filter).
+
+## Setup
+
+Containers (already created; to (re)start):
+```bash
+sudo docker start lawrag-db lawrag-embed
+```
+
+Python env:
+```bash
+python3 -m venv .venv && ./.venv/bin/pip install -r requirements.txt
+export PYTHONPATH=$PWD
+```
+
+## Usage
+
+```bash
+# Initialize schema (idempotent)
+./.venv/bin/python scripts/init_db.py
+
+# Restart all services after a reboot
+sudo docker start lawrag-db lawrag-embed lawrag-rerank lawrag-llm
+
+# Ingest a file or a whole folder, with metadata applied to the batch
+./.venv/bin/python scripts/ingest.py /path/to/docs \
+    --client Richtech --doc-type S-8 --author "Jane Partner" --doc-date 2021-06-15
+
+# Search (hybrid), optionally filtered
+./.venv/bin/python scripts/query.py "employee stock incentive plan" --client Richtech
+./.venv/bin/python scripts/query.py "registration statement" --doc-type S-8 -k 5
+
+# Due-diligence review of a contract: summary + key clauses (with quotes) + risks
+./.venv/bin/python scripts/summarize.py /path/to/contract.pdf
+./.venv/bin/python scripts/summarize.py /path/to/contract.docx --json   # machine-readable
+
+# Generate synthetic sample docs for testing
+./.venv/bin/python scripts/make_samples.py
+
+# Web app — open http://localhost:8080 in a browser on this machine
+./.venv/bin/python scripts/serve.py
+# To reach it from other devices on your private tailnet (deliberate opt-in):
+#   LAWRAG_HOST=0.0.0.0 ./.venv/bin/python scripts/serve.py
+```
+
+## Web interface
+
+A local web UI (`web/`, served by `lawrag/api.py`) with two task-focused views:
+- **Find Documents** — search box + client/type/attorney filters + AI-rerank toggle;
+  results show the source file, type badge, metadata, relevance, and a snippet.
+- **Review a Contract** — drag-and-drop a PDF/Word file; get a summary, parties, a
+  key-clause table (with verbatim source quotes), and flagged risks.
+
+Binds to `127.0.0.1` by default (this machine only) — the safe default for
+confidential documents. Nothing is sent off-device.
+
+## Layout
+
+```
+lawrag/
+  config.py     env-based config (.env)
+  db.py         schema (documents, chunks), pgvector, indexes
+  parsers.py    PDF (pymupdf) + Word (python-docx); flags scanned PDFs (NeedsOCR)
+  chunk.py      paragraph-aware chunking with overlap
+  embed.py      embedding client -> local vLLM endpoint
+  ingest.py     file -> parse -> chunk -> embed -> store (dedupe by sha256)
+  retrieve.py   hybrid search (vector + keyword, RRF) + rerank + metadata filters
+  rerank.py     cross-encoder reranker client
+  llm.py        LLM client (chat + guided-JSON structured output)
+  summarize.py  due-diligence engine: clause extraction + risk flags + summary
+  api.py        FastAPI backend (stats / search / summarize) + serves web/
+web/            local web UI (index.html, style.css, app.js) — no external assets
+scripts/        init_db / ingest / query / summarize / serve / make_samples CLIs
+data/sample/    synthetic test documents
+```
+
+## Roadmap
+
+- **Phase 1 (done):** ingestion + hybrid retrieval + **cross-encoder reranker** +
+  citations + metadata filters.
+- **Phase 2 (done):** due-diligence review — contract summary + clause extraction to a
+  fixed checklist with verbatim quotes + risk flags, served by the local `Qwen3.6-35B`
+  LLM (32k context) with guided-JSON output and map-reduce for long contracts.
+- **Auto-metadata + web upload (done):** on ingest, the LLM auto-detects doc_type /
+  title / parties / client / date (guided JSON); the "Add to Library" web tab lets a
+  lawyer drag files in — no manual tagging. Reranker upgraded to `bge-reranker-v2-m3`
+  (the 0.6B Qwen reranker degraded ranking on a larger corpus).
+- **Phase 1.5 / next:** OCR for scanned PDFs; tie extraction citations to ingested
+  chunk pages; batch DD over a folder + export; access control (per-user ethical walls).
+- **Phase 3 (drafting, when trusted):** RAG-grounded drafting from precedents with a
+  lawyer in the loop; optional LoRA for house style only — never for facts.
+
+## Privacy notes
+
+- No external network calls in the retrieval/ingest path.
+- Roadmap: encryption at rest, per-user access control tied to client/matter,
+  and an audit log of queries.
