@@ -15,6 +15,8 @@ document.querySelectorAll(".tab").forEach((tab) => {
     document.querySelectorAll(".view").forEach((v) => v.classList.remove("active"));
     tab.classList.add("active");
     $("#view-" + tab.dataset.view).classList.add("active");
+    if (tab.dataset.view === "library") loadLibrary();
+    if (tab.dataset.view === "users") loadUsers();
   });
 });
 
@@ -352,7 +354,225 @@ function ingestTable(results) {
   return panel;
 }
 
+/* ---------------- library ---------------- */
+let CURRENT_USER = null;
+let libDocs = [];
+
+async function loadLibrary() {
+  const status = $("#libStatus"), out = $("#libResults");
+  status.className = "status";
+  status.innerHTML = '<span class="spinner"></span>Loading…';
+  out.innerHTML = "";
+  try {
+    const res = await fetch("/api/documents");
+    if (res.status === 401) { showLogin(); return; }
+    libDocs = (await res.json()).documents || [];
+    status.textContent = `${libDocs.length} document${libDocs.length === 1 ? "" : "s"}`;
+    renderLibrary(libDocs);
+  } catch (err) {
+    status.className = "status err";
+    status.textContent = "Failed: " + err.message;
+  }
+}
+
+$("#libFilter").addEventListener("input", (e) => {
+  const q = e.target.value.toLowerCase();
+  renderLibrary(libDocs.filter((d) =>
+    [d.filename, d.client, d.doc_type, d.author, (d.parties || []).join(" ")]
+      .join(" ").toLowerCase().includes(q)));
+});
+
+function renderLibrary(docs) {
+  const out = $("#libResults");
+  out.innerHTML = "";
+  if (!docs.length) { out.appendChild(el("p", "auto-note", "No documents.")); return; }
+  const isAdmin = CURRENT_USER && CURRENT_USER.role === "admin";
+  const panel = el("div", "panel");
+  const table = el("table", "clauses");
+  table.innerHTML = "<thead><tr><th>File</th><th>Type</th><th>Client</th><th>Parties</th>"
+    + "<th>Date</th><th>Chunks</th>" + (isAdmin ? "<th></th>" : "") + "</tr></thead>";
+  const tb = el("tbody");
+  docs.forEach((d) => {
+    const tr = el("tr");
+    tr.appendChild(el("td", "name", d.filename));
+    tr.appendChild(el("td", null, d.doc_type || "—"));
+    tr.appendChild(el("td", null, d.client || "—"));
+    tr.appendChild(el("td", "quote", (d.parties || []).join(", ")));
+    tr.appendChild(el("td", null, d.doc_date || "—"));
+    tr.appendChild(el("td", null, String(d.n_chunks || "")));
+    if (isAdmin) {
+      const td = el("td");
+      const del = el("button", "linkbtn", "Delete");
+      del.addEventListener("click", () => deleteDoc(d));
+      td.appendChild(del);
+      tr.appendChild(td);
+    }
+    tb.appendChild(tr);
+  });
+  table.appendChild(tb);
+  panel.appendChild(table);
+  out.appendChild(panel);
+}
+
+async function deleteDoc(d) {
+  if (!confirm(`Remove "${d.filename}" from the library? This cannot be undone.`)) return;
+  const res = await fetch(`/api/documents/${d.id}`, { method: "DELETE" });
+  if (res.ok) { loadLibrary(); loadStats(); }
+  else { alert("Delete failed"); }
+}
+
+/* ---------------- users (admin) ---------------- */
+let allClients = [];
+
+async function loadUsers() {
+  const status = $("#usersStatus");
+  status.className = "status"; status.textContent = "";
+  try {
+    const [uRes, cRes] = await Promise.all([fetch("/api/users"), fetch("/api/clients")]);
+    if (uRes.status === 401) { showLogin(); return; }
+    if (uRes.status === 403) { setUsersStatus("Admin only.", true); return; }
+    allClients = (await cRes.json()).clients || [];
+    renderClientChecks($("#nu-clients"), []);
+    renderUsers((await uRes.json()).users || []);
+  } catch (err) {
+    setUsersStatus("Failed: " + err.message, true);
+  }
+}
+
+function setUsersStatus(msg, err) {
+  const s = $("#usersStatus");
+  s.className = "status" + (err ? " err" : "");
+  s.textContent = msg;
+}
+
+function renderClientChecks(container, selected) {
+  container.innerHTML = "";
+  if (!allClients.length) {
+    container.appendChild(el("span", "auto-note", "(no clients in the library yet)"));
+    return;
+  }
+  allClients.forEach((name) => {
+    const lbl = el("label", "chk");
+    const cb = document.createElement("input");
+    cb.type = "checkbox"; cb.value = name;
+    if (selected.includes(name)) cb.checked = true;
+    lbl.appendChild(cb);
+    lbl.appendChild(document.createTextNode(" " + name));
+    container.appendChild(lbl);
+  });
+}
+
+function checkedClients(container) {
+  return Array.from(container.querySelectorAll("input:checked")).map((cb) => cb.value);
+}
+
+$("#nu-create").addEventListener("click", async () => {
+  const username = $("#nu-user").value.trim();
+  const password = $("#nu-pass").value;
+  if (!username || !password) { setUsersStatus("Username and password are required.", true); return; }
+  try {
+    await postJSON("/api/users", {
+      username, password, role: $("#nu-role").value,
+      clients: checkedClients($("#nu-clients")),
+    });
+    $("#nu-user").value = ""; $("#nu-pass").value = "";
+    setUsersStatus(`Created ${username}.`, false);
+    loadUsers();
+  } catch (err) {
+    setUsersStatus("Create failed: " + err.message, true);
+  }
+});
+
+function renderUsers(users) {
+  const out = $("#usersList");
+  out.innerHTML = "";
+  const panel = el("div", "panel");
+  panel.appendChild(el("h3", null, "Users"));
+  users.forEach((u) => panel.appendChild(userRow(u)));
+  out.appendChild(panel);
+}
+
+function userRow(u) {
+  const det = el("details", "det");
+  const sum = el("summary");
+  const scope = u.role === "admin" ? "all clients"
+    : (u.clients.join(", ") || "no access yet");
+  sum.innerHTML = `<b>${escapeHtml(u.username)}</b> `
+    + `<span class="pill ${u.role === "admin" ? "warn" : "dim"}">${u.role}</span> `
+    + `<span class="who">${escapeHtml(scope)}</span>`;
+  det.appendChild(sum);
+
+  const body = el("div", "user-editor");
+  const roleSel = document.createElement("select");
+  ["lawyer", "admin"].forEach((r) => {
+    const o = new Option(r, r); if (r === u.role) o.selected = true; roleSel.appendChild(o);
+  });
+  const roleWrap = el("label", "fld");
+  roleWrap.appendChild(el("span", null, "Role "));
+  roleWrap.appendChild(roleSel);
+  body.appendChild(roleWrap);
+
+  body.appendChild(el("p", "auto-note", "Client access (ignored for admins):"));
+  const checks = el("div", "client-checks");
+  body.appendChild(checks);
+
+  const bar = el("div", "exportbar");
+  const save = el("button", "btn-ghost", "Save");
+  const pwbtn = el("button", "btn-ghost", "Reset password");
+  const del = el("button", "btn-ghost", "Delete");
+  bar.appendChild(save); bar.appendChild(pwbtn); bar.appendChild(del);
+  body.appendChild(bar);
+  det.appendChild(body);
+
+  det.addEventListener("toggle", () => {
+    if (det.open && !checks.dataset.done) {
+      renderClientChecks(checks, u.clients);
+      checks.dataset.done = "1";
+    }
+  });
+  save.addEventListener("click", async () => {
+    try {
+      await putJSON(`/api/users/${encodeURIComponent(u.username)}`,
+        { role: roleSel.value, clients: checkedClients(checks) });
+      setUsersStatus(`Saved ${u.username}.`, false);
+      loadUsers();
+    } catch (err) { setUsersStatus("Save failed: " + err.message, true); }
+  });
+  pwbtn.addEventListener("click", async () => {
+    const pw = prompt(`New password for ${u.username}:`);
+    if (!pw) return;
+    try {
+      await putJSON(`/api/users/${encodeURIComponent(u.username)}`, { password: pw });
+      setUsersStatus(`Password updated for ${u.username}.`, false);
+    } catch (err) { setUsersStatus("Failed: " + err.message, true); }
+  });
+  del.addEventListener("click", async () => {
+    if (!confirm(`Delete user ${u.username}?`)) return;
+    const res = await fetch(`/api/users/${encodeURIComponent(u.username)}`, { method: "DELETE" });
+    if (res.ok) { setUsersStatus(`Deleted ${u.username}.`, false); loadUsers(); }
+    else {
+      const d = await res.json().catch(() => ({}));
+      setUsersStatus("Delete failed: " + (d.detail || res.status), true);
+    }
+  });
+  return det;
+}
+
 /* ---------------- helpers ---------------- */
+async function putJSON(url, body) {
+  const res = await fetch(url, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    let msg = res.statusText;
+    try { msg = (await res.json()).detail || msg; } catch (_) {}
+    throw new Error(msg);
+  }
+  return res.json();
+}
+
 async function postJSON(url, body) {
   const res = await fetch(url, {
     method: "POST",
@@ -375,6 +595,7 @@ function escapeHtml(s) {
 function showLogin() { $("#login").hidden = false; }
 
 function onAuthed(u) {
+  CURRENT_USER = u;
   $("#login").hidden = true;
   const role = u.role === "admin" ? " · admin" : "";
   $("#userbox").innerHTML =
@@ -384,6 +605,7 @@ function onAuthed(u) {
     await fetch("/api/logout", { method: "POST" });
     location.reload();
   });
+  document.querySelectorAll(".admin-only").forEach((e) => { e.hidden = u.role !== "admin"; });
   loadStats();
 }
 

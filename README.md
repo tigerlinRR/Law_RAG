@@ -79,21 +79,27 @@ sudo docker start lawrag-db lawrag-embed lawrag-rerank lawrag-llm
 
 ## Web interface
 
-A local web UI (`web/`, served by `lawrag/api.py`) with two task-focused views:
+A local web UI (`web/`, served by `lawrag/api.py`), gated by login. Views:
 - **Find Documents** — search box + client/type/attorney filters + AI-rerank toggle;
   results show the source file, type badge, metadata, relevance, and a snippet.
+- **Library** — browse every document the user may see (scoped by client), with a
+  live filter. Admins can delete a document here.
 - **Review a Contract** — drag-and-drop one or more PDF/Word files. One file →
   full report (summary, parties, key-clause table with verbatim quotes, risks).
   Several files → a comparison table plus per-file reports. Export the whole batch
   to **Excel** (clause matrix + risks sheet) or **Word** (memo).
+- **Add to Library** — drag files in; type/parties/client/date auto-detected.
+- **Users** (admin only) — create users, set role (lawyer/admin), grant/revoke
+  client access with checkboxes, reset passwords, delete users.
 
-Binds to `127.0.0.1` by default (this machine only) — the safe default for
-confidential documents. Nothing is sent off-device.
+All views respect the caller's client scope. Binds to `127.0.0.1` by default (this
+machine only) — the safe default for confidential documents. Nothing is sent off-device.
 
 ## Access control (ethical walls)
 
 Every API call requires a login. Users have a role:
-- **admin** — sees all clients; manage users via `scripts/user_admin.py`.
+- **admin** — sees all clients; manage users in the web **Users** tab or via
+  `scripts/user_admin.py`.
 - **lawyer** — sees only the clients explicitly granted to them.
 
 The client allowlist is enforced **server-side** on every search, on the stats/
@@ -166,6 +172,8 @@ data/sample/    synthetic test documents
   `scripts/user_admin.py`).
 - **Client-name normalization (done):** canonical client names at ingest + admin
   `merge` to consolidate variants (`lawrag/clients.py`).
+- **In-web admin + Library (done):** a Library tab to browse permitted documents,
+  and an admin-only Users tab for full user management — no CLI needed.
 - **Phase 1.5 / next:** OCR for scanned PDFs; tie extraction citations to ingested
   chunk pages; TLS/SSO hardening; deployment auto-start.
 - **Phase 3 (drafting, when trusted):** RAG-grounded drafting from precedents with a

@@ -75,6 +75,40 @@ def revoke(username: str, client: str) -> None:
         conn.commit()
 
 
+def set_role(username: str, role: str) -> None:
+    with db.connect() as conn, conn.cursor() as cur:
+        cur.execute("UPDATE users SET role=%s WHERE username=%s", (role, username))
+        conn.commit()
+
+
+def set_clients(username: str, clients: list[str]) -> None:
+    """Replace a user's entire client allowlist."""
+    with db.connect() as conn, conn.cursor() as cur:
+        cur.execute("SELECT id FROM users WHERE username=%s", (username,))
+        row = cur.fetchone()
+        if not row:
+            raise ValueError(f"no such user: {username}")
+        uid = row[0]
+        cur.execute("DELETE FROM user_clients WHERE user_id=%s", (uid,))
+        for c in clients:
+            if c:
+                cur.execute("INSERT INTO user_clients (user_id, client) VALUES (%s,%s) "
+                            "ON CONFLICT DO NOTHING", (uid, c))
+        conn.commit()
+
+
+def delete_user(username: str) -> None:
+    with db.connect() as conn, conn.cursor() as cur:
+        cur.execute("DELETE FROM users WHERE username=%s", (username,))
+        conn.commit()
+
+
+def user_exists(username: str) -> bool:
+    with db.connect() as conn, conn.cursor() as cur:
+        cur.execute("SELECT 1 FROM users WHERE username=%s", (username,))
+        return cur.fetchone() is not None
+
+
 def list_users() -> list[dict]:
     with db.connect() as conn, conn.cursor() as cur:
         cur.execute("""

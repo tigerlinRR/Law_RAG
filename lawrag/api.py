@@ -18,7 +18,7 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import auth, db, export
+from . import auth, clients, db, export
 from .config import ROOT
 from .ingest import DocMeta, ingest_file
 from .parsers import NeedsOCR
@@ -37,6 +37,12 @@ def current_user(lawrag_session: str | None = Cookie(default=None)) -> dict:
     user = auth.resolve_session(lawrag_session)
     if not user:
         raise HTTPException(status_code=401, detail="not authenticated")
+    return user
+
+
+def require_admin(user: dict = Depends(current_user)) -> dict:
+    if user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="admin only")
     return user
 
 
@@ -189,6 +195,98 @@ def export_word(req: ExportReq, user: dict = Depends(current_user)) -> Streaming
     data = export.to_word(req.reviews)
     return StreamingResponse(io.BytesIO(data), media_type=_DOCX, headers={
         "Content-Disposition": 'attachment; filename="due_diligence.docx"'})
+
+
+# ---------- library ----------
+@app.get("/api/documents")
+def documents(user: dict = Depends(current_user)) -> dict:
+    allowed = user["allowed_clients"]
+    where, params = "", []
+    if allowed is not None:
+        if not allowed:
+            return {"documents": []}
+        where, params = "WHERE client = ANY(%s)", [allowed]
+    with db.connect() as conn, conn.cursor() as cur:
+        cur.execute(f"""
+            SELECT id, filename, doc_type, client, author,
+                   to_char(doc_date,'YYYY-MM-DD'), n_pages, n_chunks, meta,
+                   to_char(ingested_at,'YYYY-MM-DD')
+            FROM documents {where} ORDER BY ingested_at DESC, filename
+        """, params)
+        docs = []
+        for r in cur.fetchall():
+            meta = r[8] if isinstance(r[8], dict) else {}
+            docs.append({"id": r[0], "filename": r[1], "doc_type": r[2], "client": r[3],
+                         "author": r[4], "doc_date": r[5], "n_pages": r[6], "n_chunks": r[7],
+                         "parties": meta.get("parties", []), "ingested_at": r[9]})
+    return {"documents": docs}
+
+
+@app.delete("/api/documents/{doc_id}")
+def delete_document(doc_id: int, user: dict = Depends(require_admin)) -> dict:
+    with db.connect() as conn, conn.cursor() as cur:
+        cur.execute("DELETE FROM documents WHERE id=%s", (doc_id,))
+        conn.commit()
+    auth.log(user["username"], "delete_document", str(doc_id))
+    return {"ok": True}
+
+
+# ---------- user management (admin only) ----------
+class NewUser(BaseModel):
+    username: str
+    password: str
+    role: str = "lawyer"
+    clients: list[str] = []
+
+
+class UpdateUser(BaseModel):
+    role: str | None = None
+    password: str | None = None
+    clients: list[str] | None = None
+
+
+@app.get("/api/users")
+def api_users(user: dict = Depends(require_admin)) -> dict:
+    return {"users": auth.list_users()}
+
+
+@app.get("/api/clients")
+def api_clients(user: dict = Depends(require_admin)) -> dict:
+    return {"clients": [c for c, _ in clients.client_counts()]}
+
+
+@app.post("/api/users")
+def api_create_user(req: NewUser, user: dict = Depends(require_admin)) -> dict:
+    if auth.user_exists(req.username):
+        raise HTTPException(status_code=409, detail="user already exists")
+    auth.create_user(req.username, req.password, req.role,
+                     [clients.resolve(c) for c in req.clients])
+    auth.log(user["username"], "create_user", req.username)
+    return {"ok": True}
+
+
+@app.put("/api/users/{username}")
+def api_update_user(username: str, req: UpdateUser,
+                    user: dict = Depends(require_admin)) -> dict:
+    if not auth.user_exists(username):
+        raise HTTPException(status_code=404, detail="no such user")
+    if req.role is not None:
+        auth.set_role(username, req.role)
+    if req.password:
+        auth.set_password(username, req.password)
+    if req.clients is not None:
+        auth.set_clients(username, [clients.resolve(c) for c in req.clients])
+    auth.log(user["username"], "update_user", username)
+    return {"ok": True}
+
+
+@app.delete("/api/users/{username}")
+def api_delete_user(username: str, user: dict = Depends(require_admin)) -> dict:
+    if username == user["username"]:
+        raise HTTPException(status_code=400, detail="cannot delete your own account")
+    auth.delete_user(username)
+    auth.log(user["username"], "delete_user", username)
+    return {"ok": True}
 
 
 @app.get("/")

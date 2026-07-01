@@ -224,6 +224,31 @@ table.clauses tr.absent td { color: #a7abb5; }
 .det[open] > summary { border-bottom: 1px solid var(--line-soft); margin-bottom: 8px; }
 .det > div { padding: 0 12px 8px; }
 
+/* library + user management */
+.lib-filter {
+  width: 100%; font-size: 15px; padding: 12px 14px; margin-bottom: 8px;
+  border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface);
+  color: var(--ink); box-shadow: var(--shadow);
+}
+.lib-filter:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(154,123,79,.15); }
+.linkbtn { background: none; border: none; color: var(--risk); font-size: 13px; cursor: pointer;
+           font-family: var(--sans); padding: 0; }
+.linkbtn:hover { text-decoration: underline; }
+.userform { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 12px; }
+.userform input, .userform select {
+  font-family: var(--sans); font-size: 14px; padding: 9px 12px; border: 1px solid var(--line);
+  border-radius: 8px; background: var(--surface); color: var(--ink);
+}
+.userform input { flex: 1; min-width: 140px; }
+.userform .btn-primary { padding: 9px 20px; }
+.client-checks { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 4px 0 6px; }
+.chk { font-size: 13.5px; color: var(--ink-soft); display: inline-flex; align-items: center; gap: 5px; }
+.user-editor { padding: 8px 4px; }
+.user-editor .fld { display: inline-flex; align-items: center; gap: 8px; font-size: 13px;
+                    color: var(--muted); margin-bottom: 8px; }
+.user-editor .fld select { font-family: var(--sans); font-size: 13px; padding: 6px 10px;
+                           border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+
 /* ---------- footer ---------- */
 .footer {
   text-align: center; font-size: 12.5px; color: var(--muted);

@@ -43,8 +43,10 @@
 
   <nav class="tabs" role="tablist">
     <button class="tab active" data-view="search" role="tab">Find Documents</button>
+    <button class="tab" data-view="library" role="tab">Library</button>
     <button class="tab" data-view="review" role="tab">Review a Contract</button>
     <button class="tab" data-view="add" role="tab">Add to Library</button>
+    <button class="tab admin-only" data-view="users" role="tab" hidden>Users</button>
   </nav>
 
   <main class="container">
@@ -99,6 +101,34 @@
 
       <div id="addStatus" class="status"></div>
       <div id="addResults" class="results"></div>
+    </section>
+
+    <!-- ===================== LIBRARY ===================== -->
+    <section id="view-library" class="view">
+      <input id="libFilter" class="lib-filter" type="text" autocomplete="off"
+             placeholder="Filter by file, client, type or party…">
+      <div id="libStatus" class="status"></div>
+      <div id="libResults"></div>
+    </section>
+
+    <!-- ===================== USERS (admin) ===================== -->
+    <section id="view-users" class="view">
+      <div class="panel">
+        <h3>Add user</h3>
+        <div class="userform">
+          <input id="nu-user" placeholder="Username" autocomplete="off">
+          <input id="nu-pass" type="password" placeholder="Password" autocomplete="new-password">
+          <select id="nu-role">
+            <option value="lawyer">Lawyer</option>
+            <option value="admin">Admin</option>
+          </select>
+          <button id="nu-create" class="btn-primary" type="button">Create</button>
+        </div>
+        <p class="auto-note" id="nu-clients-label">Client access (lawyers only):</p>
+        <div id="nu-clients" class="client-checks"></div>
+      </div>
+      <div id="usersStatus" class="status"></div>
+      <div id="usersList"></div>
     </section>
   </main>
 
