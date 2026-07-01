@@ -61,6 +61,9 @@ sudo docker start lawrag-db lawrag-embed lawrag-rerank lawrag-llm
 ./.venv/bin/python scripts/summarize.py /path/to/contract.pdf
 ./.venv/bin/python scripts/summarize.py /path/to/contract.docx --json   # machine-readable
 
+# Batch DD over a whole folder -> Excel comparison matrix + Word memo
+./.venv/bin/python scripts/dd_batch.py /path/to/data_room --excel dd.xlsx --word dd.docx
+
 # Generate synthetic sample docs for testing
 ./.venv/bin/python scripts/make_samples.py
 
@@ -75,8 +78,10 @@ sudo docker start lawrag-db lawrag-embed lawrag-rerank lawrag-llm
 A local web UI (`web/`, served by `lawrag/api.py`) with two task-focused views:
 - **Find Documents** — search box + client/type/attorney filters + AI-rerank toggle;
   results show the source file, type badge, metadata, relevance, and a snippet.
-- **Review a Contract** — drag-and-drop a PDF/Word file; get a summary, parties, a
-  key-clause table (with verbatim source quotes), and flagged risks.
+- **Review a Contract** — drag-and-drop one or more PDF/Word files. One file →
+  full report (summary, parties, key-clause table with verbatim quotes, risks).
+  Several files → a comparison table plus per-file reports. Export the whole batch
+  to **Excel** (clause matrix + risks sheet) or **Word** (memo).
 
 Binds to `127.0.0.1` by default (this machine only) — the safe default for
 confidential documents. Nothing is sent off-device.
@@ -95,9 +100,11 @@ lawrag/
   rerank.py     cross-encoder reranker client
   llm.py        LLM client (chat + guided-JSON structured output)
   summarize.py  due-diligence engine: clause extraction + risk flags + summary
-  api.py        FastAPI backend (stats / search / summarize) + serves web/
+  metadata.py   auto-extract doc_type/title/parties/client/date at ingest
+  export.py     batch DD export to Excel (matrix) + Word (memo)
+  api.py        FastAPI backend (stats/search/summarize/ingest/export) + serves web/
 web/            local web UI (index.html, style.css, app.js) — no external assets
-scripts/        init_db / ingest / query / summarize / serve / make_samples CLIs
+scripts/        init_db / ingest / query / summarize / dd_batch / serve / make_samples CLIs
 data/sample/    synthetic test documents
 ```
 
@@ -112,8 +119,11 @@ data/sample/    synthetic test documents
   title / parties / client / date (guided JSON); the "Add to Library" web tab lets a
   lawyer drag files in — no manual tagging. Reranker upgraded to `bge-reranker-v2-m3`
   (the 0.6B Qwen reranker degraded ranking on a larger corpus).
+- **Batch DD + export (done):** review a whole folder of contracts; export an Excel
+  comparison matrix (one row per contract, clause columns, + a risks sheet) or a Word
+  memo — via the web "Review" tab or `scripts/dd_batch.py`.
 - **Phase 1.5 / next:** OCR for scanned PDFs; tie extraction citations to ingested
-  chunk pages; batch DD over a folder + export; access control (per-user ethical walls).
+  chunk pages; access control (per-user ethical walls); deployment auto-start.
 - **Phase 3 (drafting, when trusted):** RAG-grounded drafting from precedents with a
   lawyer in the loop; optional LoRA for house style only — never for facts.
 

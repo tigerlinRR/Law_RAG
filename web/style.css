@@ -180,6 +180,22 @@ table.clauses tr.absent td { color: #a7abb5; }
 .pill.err2 { background: var(--risk-bg); color: var(--risk); }
 .detail { font-size: 11.5px; color: var(--risk); margin-top: 4px; }
 
+/* export bar + batch details */
+.exportbar { display: flex; align-items: center; gap: 10px; margin: 4px 2px 16px; }
+.exp-label { font-size: 13px; color: var(--muted); }
+.btn-ghost {
+  font-family: var(--sans); font-size: 13px; font-weight: 600; color: var(--ink);
+  background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+  padding: 7px 14px; cursor: pointer; transition: .15s;
+}
+.btn-ghost:hover { border-color: var(--accent); color: var(--accent-dk); }
+.det { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+       box-shadow: var(--shadow); margin-bottom: 12px; padding: 4px 6px; }
+.det > summary { cursor: pointer; font-family: var(--serif); font-size: 16px; font-weight: 700;
+                 padding: 10px 12px; color: var(--ink); }
+.det[open] > summary { border-bottom: 1px solid var(--line-soft); margin-bottom: 8px; }
+.det > div { padding: 0 12px 8px; }
+
 /* ---------- footer ---------- */
 .footer {
   text-align: center; font-size: 12.5px; color: var(--muted);

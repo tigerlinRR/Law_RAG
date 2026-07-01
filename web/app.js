@@ -95,41 +95,136 @@ function resultCard(h) {
 /* ---------------- contract review ---------------- */
 const dz = $("#dropzone"), fileInput = $("#fileInput");
 dz.addEventListener("click", () => fileInput.click());
-fileInput.addEventListener("change", () => { if (fileInput.files[0]) reviewFile(fileInput.files[0]); });
+fileInput.addEventListener("change", () => { if (fileInput.files.length) reviewFiles(fileInput.files); });
 ["dragover", "dragenter"].forEach((ev) =>
   dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.add("drag"); }));
 ["dragleave", "drop"].forEach((ev) =>
   dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.remove("drag"); }));
 dz.addEventListener("drop", (e) => {
-  const f = e.dataTransfer.files[0];
-  if (f) reviewFile(f);
+  if (e.dataTransfer.files.length) reviewFiles(e.dataTransfer.files);
 });
 
-async function reviewFile(file) {
+let lastReviews = [];
+
+async function reviewFiles(fileList) {
   const status = $("#reviewStatus"), report = $("#report");
   report.innerHTML = "";
+  lastReviews = [];
+  const files = Array.from(fileList);
+  const errors = [];
   status.className = "status";
-  status.innerHTML =
-    `<span class="spinner"></span>Analyzing <b>${escapeHtml(file.name)}</b> with the local model — this can take ~30s…`;
 
-  const fd = new FormData();
-  fd.append("file", file);
-  try {
-    const res = await fetch("/api/summarize", { method: "POST", body: fd });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || "review failed");
-    status.textContent = "";
-    renderReport(data);
-  } catch (err) {
+  for (let i = 0; i < files.length; i++) {
+    status.innerHTML =
+      `<span class="spinner"></span>Analyzing ${i + 1}/${files.length} — <b>${escapeHtml(files[i].name)}</b> (~30s each)…`;
+    const fd = new FormData();
+    fd.append("file", files[i]);
+    try {
+      const res = await fetch("/api/summarize", { method: "POST", body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "review failed");
+      lastReviews.push(data);
+    } catch (err) {
+      errors.push(`${files[i].name}: ${err.message}`);
+    }
+  }
+
+  if (!lastReviews.length) {
     status.className = "status err";
-    status.textContent = "Review failed: " + err.message;
+    status.textContent = "Review failed. " + errors.join(" · ");
+    return;
+  }
+  status.className = "status";
+  status.textContent = errors.length ? ("Skipped — " + errors.join(" · ")) : "";
+
+  report.appendChild(exportBar());
+  if (lastReviews.length === 1) {
+    renderReportInto(lastReviews[0], report);
+  } else {
+    report.appendChild(batchTable(lastReviews));
+    lastReviews.forEach((r) => {
+      const det = el("details", "det");
+      const sum = el("summary", null,
+        (r._source || "Contract") + (r.doc_type ? "  ·  " + r.doc_type : ""));
+      det.appendChild(sum);
+      const holder = el("div");
+      det.appendChild(holder);
+      det.addEventListener("toggle", () => {
+        if (det.open && !holder.dataset.done) {
+          renderReportInto(r, holder);
+          holder.dataset.done = "1";
+        }
+      });
+      report.appendChild(det);
+    });
   }
 }
 
-function renderReport(r) {
-  const report = $("#report");
-  report.innerHTML = "";
+function exportBar() {
+  const bar = el("div", "exportbar");
+  bar.appendChild(el("span", "exp-label", "Export report:"));
+  const xls = el("button", "btn-ghost", "Excel (.xlsx)");
+  const doc = el("button", "btn-ghost", "Word (.docx)");
+  xls.addEventListener("click", () => downloadExport("excel"));
+  doc.addEventListener("click", () => downloadExport("word"));
+  bar.appendChild(xls);
+  bar.appendChild(doc);
+  return bar;
+}
 
+async function downloadExport(fmt) {
+  if (!lastReviews.length) return;
+  try {
+    const res = await fetch(`/api/export/${fmt}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reviews: lastReviews }),
+    });
+    if (!res.ok) throw new Error("export failed");
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = el("a");
+    a.href = url;
+    a.download = fmt === "excel" ? "due_diligence.xlsx" : "due_diligence.docx";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    const s = $("#reviewStatus");
+    s.className = "status err";
+    s.textContent = "Export failed: " + err.message;
+  }
+}
+
+function batchTable(reviews) {
+  const panel = el("div", "panel");
+  panel.appendChild(el("h3", null, `Comparison — ${reviews.length} contracts`));
+  const table = el("table", "clauses");
+  table.innerHTML =
+    "<thead><tr><th>File</th><th>Type</th><th>Term</th><th>Termination</th><th>Governing law</th><th>Risks</th></tr></thead>";
+  const tb = el("tbody");
+  reviews.forEach((r) => {
+    const cm = {};
+    (r.clauses || []).forEach((c) => { cm[c.name] = c.value; });
+    const tr = el("tr");
+    tr.appendChild(el("td", "name", r._source || ""));
+    tr.appendChild(el("td", null, r.doc_type || "—"));
+    tr.appendChild(el("td", null, cm["Term / Duration"] || "—"));
+    tr.appendChild(el("td", null, cm["Termination"] || "—"));
+    tr.appendChild(el("td", null, cm["Governing Law"] || "—"));
+    const n = (r.key_risks || []).length;
+    const rt = el("td");
+    rt.appendChild(el("span", "pill " + (n ? "err2" : "ok"), String(n)));
+    tr.appendChild(rt);
+    tb.appendChild(tr);
+  });
+  table.appendChild(tb);
+  panel.appendChild(table);
+  return panel;
+}
+
+function renderReportInto(r, report) {
   const head = el("div", "report-head");
   const h2 = el("h2", null, r._source || "Contract");
   if (r.doc_type) h2.appendChild(el("span", "badge", r.doc_type));

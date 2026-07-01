@@ -7,22 +7,26 @@ Serves the static frontend (web/) and exposes:
 """
 from __future__ import annotations
 
+import io
 import shutil
 import tempfile
 from dataclasses import asdict
 from pathlib import Path
 
 from fastapi import FastAPI, File, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import db
+from . import db, export
 from .config import ROOT
 from .ingest import DocMeta, ingest_file
 from .parsers import NeedsOCR
 from .retrieve import Filters, search
 from .summarize import review_contract
+
+_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+_DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
 WEB = ROOT / "web"
 app = FastAPI(title="Law_RAG", docs_url="/api/docs")
@@ -112,6 +116,24 @@ async def api_ingest(files: list[UploadFile] = File(...)):
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
     return {"results": results}
+
+
+class ExportReq(BaseModel):
+    reviews: list[dict]
+
+
+@app.post("/api/export/excel")
+def export_excel(req: ExportReq) -> StreamingResponse:
+    data = export.to_excel(req.reviews)
+    return StreamingResponse(io.BytesIO(data), media_type=_XLSX, headers={
+        "Content-Disposition": 'attachment; filename="due_diligence.xlsx"'})
+
+
+@app.post("/api/export/word")
+def export_word(req: ExportReq) -> StreamingResponse:
+    data = export.to_word(req.reviews)
+    return StreamingResponse(io.BytesIO(data), media_type=_DOCX, headers={
+        "Content-Disposition": 'attachment; filename="due_diligence.docx"'})
 
 
 @app.get("/")
