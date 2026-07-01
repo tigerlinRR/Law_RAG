@@ -10,6 +10,9 @@ __pycache__/
 # Generated test documents (regenerate with scripts/make_samples.py)
 data/
 
+# Stored original documents (real client files — never commit)
+storage/
+
 # Local artifacts
 *.log
 *.png

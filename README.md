@@ -83,7 +83,8 @@ A local web UI (`web/`, served by `lawrag/api.py`), gated by login. Views:
 - **Find Documents** — search box + client/type/attorney filters + AI-rerank toggle;
   results show the source file, type badge, metadata, relevance, and a snippet.
 - **Library** — browse every document the user may see (scoped by client), with a
-  live filter. Admins can delete a document here.
+  live filter. **Click a filename to open the original PDF/Word** (downloads are
+  access-scoped too). Admins can delete a document here.
 - **Review a Contract** — drag-and-drop one or more PDF/Word files. One file →
   full report (summary, parties, key-clause table with verbatim quotes, risks).
   Several files → a comparison table plus per-file reports. Export the whole batch
@@ -174,6 +175,8 @@ data/sample/    synthetic test documents
   `merge` to consolidate variants (`lawrag/clients.py`).
 - **In-web admin + Library (done):** a Library tab to browse permitted documents,
   and an admin-only Users tab for full user management — no CLI needed.
+- **Original-file storage (done):** ingested originals are kept in `storage/`
+  (keyed by hash, gitignored) and served back via an access-scoped download link.
 - **Phase 1.5 / next:** OCR for scanned PDFs; tie extraction citations to ingested
   chunk pages; TLS/SSO hardening; deployment auto-start.
 - **Phase 3 (drafting, when trusted):** RAG-grounded drafting from precedents with a

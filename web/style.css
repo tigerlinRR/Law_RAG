@@ -234,6 +234,9 @@ table.clauses tr.absent td { color: #a7abb5; }
 .linkbtn { background: none; border: none; color: var(--risk); font-size: 13px; cursor: pointer;
            font-family: var(--sans); padding: 0; }
 .linkbtn:hover { text-decoration: underline; }
+.doclink { color: var(--accent-dk); font-weight: 600; text-decoration: none; }
+.doclink:hover { text-decoration: underline; }
+.notstored { color: var(--muted); font-size: 12px; font-weight: 400; }
 .userform { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 12px; }
 .userform input, .userform select {
   font-family: var(--sans); font-size: 14px; padding: 9px 12px; border: 1px solid var(--line);

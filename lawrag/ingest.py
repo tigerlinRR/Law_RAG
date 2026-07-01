@@ -7,11 +7,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import clients, db, embed
 from .chunk import chunk_blocks
+from .config import CONFIG
 from .metadata import extract_metadata
 from .parsers import NeedsOCR, SUPPORTED, parse
 
@@ -45,6 +47,16 @@ def _sha256(path: Path) -> str:
         for block in iter(lambda: f.read(1 << 20), b""):
             h.update(block)
     return h.hexdigest()
+
+
+def _store_original(src: Path, digest: str) -> str:
+    """Copy the original file into managed storage (keyed by hash) and return its path."""
+    dest_dir = Path(CONFIG.storage_dir) / digest[:2]
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / f"{digest}{src.suffix.lower()}"
+    if not dest.exists():
+        shutil.copy2(src, dest)
+    return str(dest)
 
 
 def ingest_file(path: Path, meta: DocMeta | None = None, auto: bool = False) -> IngestResult:
@@ -94,6 +106,7 @@ def ingest_file(path: Path, meta: DocMeta | None = None, auto: bool = False) -> 
 
     vectors = embed.embed_documents([c.content for c in chunks])
     n_pages = max((b.page or 0 for b in blocks), default=0) or None
+    stored_path = _store_original(path, digest)
 
     with db.connect() as conn:
         with conn.cursor() as cur:
@@ -101,14 +114,14 @@ def ingest_file(path: Path, meta: DocMeta | None = None, auto: bool = False) -> 
                 """
                 INSERT INTO documents
                     (sha256, path, filename, doc_type, client, matter, author,
-                     doc_date, n_pages, n_chunks, meta)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                     doc_date, n_pages, n_chunks, meta, stored_path)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 RETURNING id
                 """,
                 (
                     digest, str(path.resolve()), path.name, meta.doc_type,
                     meta.client, meta.matter, meta.author, meta.doc_date,
-                    n_pages, len(chunks), json.dumps(meta.extra),
+                    n_pages, len(chunks), json.dumps(meta.extra), stored_path,
                 ),
             )
             doc_id = cur.fetchone()[0]

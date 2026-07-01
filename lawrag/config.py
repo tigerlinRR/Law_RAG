@@ -30,6 +30,9 @@ class Config:
     embed_model: str = os.getenv("EMBED_MODEL", "qwen3-embed")
     embed_dim: int = _int("EMBED_DIM", 1024)
 
+    # Where original uploaded files are kept (so the Library can serve them back).
+    storage_dir: str = os.getenv("STORAGE_DIR", str(_ROOT / "storage"))
+
     # Chunking
     chunk_chars: int = _int("CHUNK_CHARS", 1200)
     chunk_overlap: int = _int("CHUNK_OVERLAP", 150)

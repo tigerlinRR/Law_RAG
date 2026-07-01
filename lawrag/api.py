@@ -8,6 +8,8 @@ Serves the static frontend (web/) and exposes:
 from __future__ import annotations
 
 import io
+import mimetypes
+import os
 import shutil
 import tempfile
 from dataclasses import asdict
@@ -210,16 +212,39 @@ def documents(user: dict = Depends(current_user)) -> dict:
         cur.execute(f"""
             SELECT id, filename, doc_type, client, author,
                    to_char(doc_date,'YYYY-MM-DD'), n_pages, n_chunks, meta,
-                   to_char(ingested_at,'YYYY-MM-DD')
+                   to_char(ingested_at,'YYYY-MM-DD'), stored_path, path
             FROM documents {where} ORDER BY ingested_at DESC, filename
         """, params)
         docs = []
         for r in cur.fetchall():
             meta = r[8] if isinstance(r[8], dict) else {}
+            has_file = bool((r[10] and os.path.exists(r[10])) or (r[11] and os.path.exists(r[11])))
             docs.append({"id": r[0], "filename": r[1], "doc_type": r[2], "client": r[3],
                          "author": r[4], "doc_date": r[5], "n_pages": r[6], "n_chunks": r[7],
-                         "parties": meta.get("parties", []), "ingested_at": r[9]})
+                         "parties": meta.get("parties", []), "ingested_at": r[9],
+                         "has_file": has_file})
     return {"documents": docs}
+
+
+@app.get("/api/documents/{doc_id}/file")
+def document_file(doc_id: int, user: dict = Depends(current_user)):
+    """Serve the original file, enforcing the caller's client scope."""
+    with db.connect() as conn, conn.cursor() as cur:
+        cur.execute("SELECT filename, client, stored_path, path FROM documents WHERE id=%s",
+                    (doc_id,))
+        row = cur.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="document not found")
+    filename, client, stored_path, path = row
+    allowed = user["allowed_clients"]
+    if allowed is not None and client not in allowed:
+        raise HTTPException(status_code=403, detail="not permitted")
+    fpath = next((p for p in (stored_path, path) if p and os.path.exists(p)), None)
+    if not fpath:
+        raise HTTPException(status_code=404, detail="original file is not stored")
+    media = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+    return FileResponse(fpath, media_type=media, filename=filename,
+                        content_disposition_type="inline")
 
 
 @app.delete("/api/documents/{doc_id}")

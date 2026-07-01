@@ -56,6 +56,9 @@ CREATE TABLE IF NOT EXISTS chunks (
 
 -- Keyword (full-text) index for the BM25-style leg of hybrid search.
 CREATE INDEX IF NOT EXISTS chunks_tsv_idx ON chunks USING GIN (tsv);
+-- Path to the stored original file, so the Library can serve it back.
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS stored_path TEXT;
+
 -- Metadata indexes for fast filtering / "find the S-8 for client X".
 CREATE INDEX IF NOT EXISTS documents_client_idx ON documents (client);
 CREATE INDEX IF NOT EXISTS documents_doc_type_idx ON documents (doc_type);

@@ -394,7 +394,18 @@ function renderLibrary(docs) {
   const tb = el("tbody");
   docs.forEach((d) => {
     const tr = el("tr");
-    tr.appendChild(el("td", "name", d.filename));
+    const nameCell = el("td", "name");
+    if (d.has_file) {
+      const a = el("a", "doclink", d.filename);
+      a.href = `/api/documents/${d.id}/file`;
+      a.target = "_blank";
+      a.rel = "noopener";
+      nameCell.appendChild(a);
+    } else {
+      nameCell.appendChild(document.createTextNode(d.filename));
+      nameCell.appendChild(el("span", "notstored", " (not stored)"));
+    }
+    tr.appendChild(nameCell);
     tr.appendChild(el("td", null, d.doc_type || "—"));
     tr.appendChild(el("td", null, d.client || "—"));
     tr.appendChild(el("td", "quote", (d.parties || []).join(", ")));
