@@ -60,6 +60,38 @@ CREATE INDEX IF NOT EXISTS chunks_tsv_idx ON chunks USING GIN (tsv);
 CREATE INDEX IF NOT EXISTS documents_client_idx ON documents (client);
 CREATE INDEX IF NOT EXISTS documents_doc_type_idx ON documents (doc_type);
 CREATE INDEX IF NOT EXISTS documents_author_idx ON documents (author);
+
+-- ===== Access control (ethical walls) =====
+-- users: who may log in; role 'admin' sees everything, 'lawyer' is scoped.
+CREATE TABLE IF NOT EXISTS users (
+    id            BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    username      TEXT UNIQUE NOT NULL,
+    salt          TEXT NOT NULL,
+    password_hash TEXT NOT NULL,
+    role          TEXT NOT NULL DEFAULT 'lawyer',
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+-- user_clients: the clients a (non-admin) user is permitted to access.
+CREATE TABLE IF NOT EXISTS user_clients (
+    user_id       BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    client        TEXT NOT NULL,
+    PRIMARY KEY (user_id, client)
+);
+-- sessions: server-side session tokens (survive restarts, expire).
+CREATE TABLE IF NOT EXISTS sessions (
+    token         TEXT PRIMARY KEY,
+    user_id       BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    expires_at    TIMESTAMPTZ NOT NULL
+);
+-- audit_log: who did what, when.
+CREATE TABLE IF NOT EXISTS audit_log (
+    id            BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    username      TEXT,
+    action        TEXT,
+    detail        TEXT,
+    ts            TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 """
 
 # Vector ANN index — created after data exists so HNSW builds well. Kept separate

@@ -62,11 +62,20 @@ def search(
     filters: Filters | None = None,
     top_k: int | None = None,
     use_rerank: bool | None = None,
+    allowed_clients: list[str] | None = None,
 ) -> list[Hit]:
+    """`allowed_clients`: None = unrestricted (admin); a list = hard limit to those
+    clients (ethical wall). An empty list means the caller may see nothing."""
     filters = filters or Filters()
     top_k = top_k or CONFIG.topk_final
     use_rerank = CONFIG.rerank_enabled if use_rerank is None else use_rerank
     fwhere, fparams = filters.where()
+    # Mandatory access-control filter, applied on top of any user-chosen filters.
+    if allowed_clients is not None:
+        if not allowed_clients:
+            return []
+        fwhere += " AND d.client = ANY(%s)"
+        fparams = [*fparams, allowed_clients]
     qvec = embed.embed_query(query)
 
     vector_sql = f"""

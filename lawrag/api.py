@@ -13,12 +13,12 @@ import tempfile
 from dataclasses import asdict
 from pathlib import Path
 
-from fastapi import FastAPI, File, UploadFile
+from fastapi import Cookie, Depends, FastAPI, File, HTTPException, Response, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import db, export
+from . import auth, db, export
 from .config import ROOT
 from .ingest import DocMeta, ingest_file
 from .parsers import NeedsOCR
@@ -27,9 +27,51 @@ from .summarize import review_contract
 
 _XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 _DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+_COOKIE = "lawrag_session"
+
+
+def current_user(lawrag_session: str | None = Cookie(default=None)) -> dict:
+    """Auth dependency: resolves the session cookie to a user or 401s.
+
+    Returns a dict with allowed_clients (None for admin = unrestricted)."""
+    user = auth.resolve_session(lawrag_session)
+    if not user:
+        raise HTTPException(status_code=401, detail="not authenticated")
+    return user
+
+
+class LoginReq(BaseModel):
+    username: str
+    password: str
 
 WEB = ROOT / "web"
 app = FastAPI(title="Law_RAG", docs_url="/api/docs")
+
+
+@app.post("/api/login")
+def login(req: LoginReq, response: Response) -> dict:
+    user = auth.authenticate(req.username, req.password)
+    if not user:
+        auth.log(req.username, "login_failed")
+        raise HTTPException(status_code=401, detail="invalid username or password")
+    token = auth.create_session(user["id"])
+    response.set_cookie(_COOKIE, token, httponly=True, samesite="lax",
+                        max_age=auth.SESSION_HOURS * 3600, path="/")
+    auth.log(user["username"], "login")
+    return {"username": user["username"], "role": user["role"]}
+
+
+@app.post("/api/logout")
+def logout(response: Response, lawrag_session: str | None = Cookie(default=None)) -> dict:
+    auth.delete_session(lawrag_session)
+    response.delete_cookie(_COOKIE, path="/")
+    return {"ok": True}
+
+
+@app.get("/api/me")
+def me(user: dict = Depends(current_user)) -> dict:
+    return {"username": user["username"], "role": user["role"],
+            "clients": user["allowed_clients"]}
 
 
 class SearchReq(BaseModel):
@@ -43,18 +85,27 @@ class SearchReq(BaseModel):
 
 
 @app.get("/api/stats")
-def stats() -> dict:
+def stats(user: dict = Depends(current_user)) -> dict:
+    allowed = user["allowed_clients"]  # None = admin/unrestricted
+    scope = "" if allowed is None else " AND client = ANY(%(a)s)"
+    params = {} if allowed is None else {"a": allowed}
     with db.connect() as conn, conn.cursor() as cur:
-        cur.execute("SELECT count(*) FROM documents")
+        if allowed is None:
+            cur.execute("SELECT count(*) FROM documents")
+        else:
+            cur.execute("SELECT count(*) FROM documents WHERE client = ANY(%(a)s)", params)
         docs = cur.fetchone()[0]
-        cur.execute("SELECT count(*) FROM chunks")
+        if allowed is None:
+            cur.execute("SELECT count(*) FROM chunks")
+        else:
+            cur.execute("SELECT count(*) FROM chunks c JOIN documents d ON d.id=c.document_id "
+                        "WHERE d.client = ANY(%(a)s)", params)
         chunks = cur.fetchone()[0]
 
         def distinct(col: str) -> list[str]:
             cur.execute(
                 f"SELECT DISTINCT {col} FROM documents "
-                f"WHERE {col} IS NOT NULL AND {col} <> '' ORDER BY 1"
-            )
+                f"WHERE {col} IS NOT NULL AND {col} <> ''{scope} ORDER BY 1", params)
             return [r[0] for r in cur.fetchall()]
 
         return {
@@ -66,10 +117,12 @@ def stats() -> dict:
 
 
 @app.post("/api/search")
-def api_search(req: SearchReq) -> dict:
+def api_search(req: SearchReq, user: dict = Depends(current_user)) -> dict:
     filters = Filters(client=req.client or None, matter=req.matter or None,
                       doc_type=req.doc_type or None, author=req.author or None)
-    hits = search(req.query, filters=filters, top_k=req.top_k, use_rerank=req.rerank)
+    hits = search(req.query, filters=filters, top_k=req.top_k, use_rerank=req.rerank,
+                  allowed_clients=user["allowed_clients"])
+    auth.log(user["username"], "search", req.query)
     out = []
     for h in hits:
         d = asdict(h)
@@ -79,7 +132,8 @@ def api_search(req: SearchReq) -> dict:
 
 
 @app.post("/api/summarize", response_model=None)
-async def api_summarize(file: UploadFile = File(...)):
+async def api_summarize(file: UploadFile = File(...), user: dict = Depends(current_user)):
+    auth.log(user["username"], "summarize", file.filename or "")
     tmpdir = Path(tempfile.mkdtemp(prefix="lawrag_"))
     dest = tmpdir / (file.filename or "upload")
     try:
@@ -97,8 +151,9 @@ async def api_summarize(file: UploadFile = File(...)):
 
 
 @app.post("/api/ingest", response_model=None)
-async def api_ingest(files: list[UploadFile] = File(...)):
+async def api_ingest(files: list[UploadFile] = File(...), user: dict = Depends(current_user)):
     """Ingest uploaded files into the knowledge base with auto-extracted metadata."""
+    auth.log(user["username"], "ingest", ", ".join(f.filename or "" for f in files))
     results = []
     tmpdir = Path(tempfile.mkdtemp(prefix="lawrag_ing_"))
     try:
@@ -123,14 +178,14 @@ class ExportReq(BaseModel):
 
 
 @app.post("/api/export/excel")
-def export_excel(req: ExportReq) -> StreamingResponse:
+def export_excel(req: ExportReq, user: dict = Depends(current_user)) -> StreamingResponse:
     data = export.to_excel(req.reviews)
     return StreamingResponse(io.BytesIO(data), media_type=_XLSX, headers={
         "Content-Disposition": 'attachment; filename="due_diligence.xlsx"'})
 
 
 @app.post("/api/export/word")
-def export_word(req: ExportReq) -> StreamingResponse:
+def export_word(req: ExportReq, user: dict = Depends(current_user)) -> StreamingResponse:
     data = export.to_word(req.reviews)
     return StreamingResponse(io.BytesIO(data), media_type=_DOCX, headers={
         "Content-Disposition": 'attachment; filename="due_diligence.docx"'})

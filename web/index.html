@@ -18,8 +18,28 @@
         <span class="brand-sub">Private Legal Document Intelligence</span>
       </div>
     </div>
-    <div class="stats" id="stats">&nbsp;</div>
+    <div class="topbar-right">
+      <div class="stats" id="stats">&nbsp;</div>
+      <div class="userbox" id="userbox"></div>
+    </div>
   </header>
+
+  <div id="login" class="login-overlay">
+    <form id="loginForm" class="login-card">
+      <div class="login-brand">
+        <svg class="mark" viewBox="0 0 24 24" width="30" height="30" aria-hidden="true">
+          <path d="M12 3l8 3v2H4V6l8-3zm-6 7h2v7H6v-7zm5 0h2v7h-2v-7zm5 0h2v7h-2v-7zM4 19h16v2H4v-2z"
+                fill="currentColor"/>
+        </svg>
+        <span>Law&nbsp;RAG</span>
+      </div>
+      <p class="login-sub">Sign in to the document library</p>
+      <input id="lg-user" placeholder="Username" autocomplete="username" autofocus>
+      <input id="lg-pass" type="password" placeholder="Password" autocomplete="current-password">
+      <button class="btn-primary" type="submit">Sign in</button>
+      <div id="loginErr" class="login-err"></div>
+    </form>
+  </div>
 
   <nav class="tabs" role="tablist">
     <button class="tab active" data-view="search" role="tab">Find Documents</button>

@@ -21,9 +21,11 @@ document.querySelectorAll(".tab").forEach((tab) => {
 /* ---------------- stats + filters ---------------- */
 async function loadStats() {
   try {
-    const s = await (await fetch("/api/stats")).json();
+    const res = await fetch("/api/stats");
+    if (res.status === 401) { showLogin(); return; }
+    const s = await res.json();
     $("#stats").innerHTML =
-      `<b>${s.documents.toLocaleString()}</b> documents · <b>${s.chunks.toLocaleString()}</b> passages indexed`;
+      `<b>${s.documents.toLocaleString()}</b> documents · <b>${s.chunks.toLocaleString()}</b> passages`;
     fillSelect("#f-client", s.clients);
     fillSelect("#f-doc_type", s.doc_types);
     fillSelect("#f-author", s.authors);
@@ -33,6 +35,7 @@ async function loadStats() {
 }
 function fillSelect(sel, values) {
   const node = $(sel);
+  node.length = 1;   // keep the "Any" placeholder, drop stale options
   (values || []).forEach((v) => node.appendChild(new Option(v, v)));
 }
 
@@ -368,4 +371,40 @@ function escapeHtml(s) {
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
-loadStats();
+/* ---------------- auth ---------------- */
+function showLogin() { $("#login").hidden = false; }
+
+function onAuthed(u) {
+  $("#login").hidden = true;
+  const role = u.role === "admin" ? " · admin" : "";
+  $("#userbox").innerHTML =
+    `<span class="who">${escapeHtml(u.username)}${role}</span>` +
+    `<button id="logoutBtn" class="logout">Sign out</button>`;
+  $("#logoutBtn").addEventListener("click", async () => {
+    await fetch("/api/logout", { method: "POST" });
+    location.reload();
+  });
+  loadStats();
+}
+
+$("#loginForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  $("#loginErr").textContent = "";
+  try {
+    const data = await postJSON("/api/login",
+      { username: $("#lg-user").value, password: $("#lg-pass").value });
+    onAuthed(data);
+  } catch (err) {
+    $("#loginErr").textContent = "Sign-in failed: " + err.message;
+  }
+});
+
+async function checkAuth() {
+  try {
+    const res = await fetch("/api/me");
+    if (res.ok) { onAuthed(await res.json()); return; }
+  } catch (_) {}
+  showLogin();
+}
+
+checkAuth();

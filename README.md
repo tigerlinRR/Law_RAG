@@ -46,6 +46,10 @@ export PYTHONPATH=$PWD
 # Initialize schema (idempotent)
 ./.venv/bin/python scripts/init_db.py
 
+# Create the first admin user, then scoped lawyers (see Access control below)
+./.venv/bin/python scripts/user_admin.py add admin --password '<pick-one>' --role admin
+./.venv/bin/python scripts/user_admin.py add jchen --password '<pw>' --clients Richtech "Acme Corp"
+
 # Restart all services after a reboot
 sudo docker start lawrag-db lawrag-embed lawrag-rerank lawrag-llm
 
@@ -86,6 +90,29 @@ A local web UI (`web/`, served by `lawrag/api.py`) with two task-focused views:
 Binds to `127.0.0.1` by default (this machine only) — the safe default for
 confidential documents. Nothing is sent off-device.
 
+## Access control (ethical walls)
+
+Every API call requires a login. Users have a role:
+- **admin** — sees all clients; manage users via `scripts/user_admin.py`.
+- **lawyer** — sees only the clients explicitly granted to them.
+
+The client allowlist is enforced **server-side** on every search, on the stats/
+filter lists, and on ingest — a lawyer can never retrieve another client's
+documents, even when they are the most relevant match (conflict-of-interest wall).
+All logins and searches are written to an `audit_log` table.
+
+```bash
+python scripts/user_admin.py add    jchen --password PW --clients Richtech "Acme Corp"
+python scripts/user_admin.py grant  jchen "New Client"
+python scripts/user_admin.py revoke jchen "Acme Corp"
+python scripts/user_admin.py list
+```
+
+**Scope of this layer:** it is application-layer isolation. Production deployment
+still needs transport security (TLS/HTTPS — today it is plain HTTP over localhost/
+tailnet), optional SSO, and **client-name normalization** (e.g. "Richtech" vs
+"Richtech Robotics Inc." must map to one canonical client for grants to line up).
+
 ## Layout
 
 ```
@@ -102,9 +129,10 @@ lawrag/
   summarize.py  due-diligence engine: clause extraction + risk flags + summary
   metadata.py   auto-extract doc_type/title/parties/client/date at ingest
   export.py     batch DD export to Excel (matrix) + Word (memo)
-  api.py        FastAPI backend (stats/search/summarize/ingest/export) + serves web/
+  auth.py       users, per-client permissions, sessions, audit (ethical walls)
+  api.py        FastAPI backend (login/stats/search/summarize/ingest/export) + serves web/
 web/            local web UI (index.html, style.css, app.js) — no external assets
-scripts/        init_db / ingest / query / summarize / dd_batch / serve / make_samples CLIs
+scripts/        init_db / user_admin / ingest / query / summarize / dd_batch / serve / make_samples
 data/sample/    synthetic test documents
 ```
 
@@ -122,8 +150,11 @@ data/sample/    synthetic test documents
 - **Batch DD + export (done):** review a whole folder of contracts; export an Excel
   comparison matrix (one row per contract, clause columns, + a risks sheet) or a Word
   memo — via the web "Review" tab or `scripts/dd_batch.py`.
+- **Access control (done):** login + role-based, per-client ethical walls enforced
+  server-side on all retrieval/stats/ingest, with an audit log (`lawrag/auth.py`,
+  `scripts/user_admin.py`).
 - **Phase 1.5 / next:** OCR for scanned PDFs; tie extraction citations to ingested
-  chunk pages; access control (per-user ethical walls); deployment auto-start.
+  chunk pages; client-name normalization; TLS/SSO hardening; deployment auto-start.
 - **Phase 3 (drafting, when trusted):** RAG-grounded drafting from precedents with a
   lawyer in the loop; optional LoRA for house style only — never for facts.
 
