@@ -92,6 +92,13 @@ CREATE TABLE IF NOT EXISTS audit_log (
     detail        TEXT,
     ts            TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- client_aliases: maps a normalized client-name key -> one canonical client name,
+-- so "Richtech" and "Richtech Robotics Inc." resolve to the same client.
+CREATE TABLE IF NOT EXISTS client_aliases (
+    alias_key     TEXT PRIMARY KEY,
+    canonical     TEXT NOT NULL
+);
 """
 
 # Vector ANN index — created after data exists so HNSW builds well. Kept separate

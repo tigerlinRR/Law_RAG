@@ -10,7 +10,7 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import db, embed
+from . import clients, db, embed
 from .chunk import chunk_blocks
 from .metadata import extract_metadata
 from .parsers import NeedsOCR, SUPPORTED, parse
@@ -83,6 +83,10 @@ def ingest_file(path: Path, meta: DocMeta | None = None, auto: bool = False) -> 
             meta.extra["auto"] = True
         except Exception as e:  # noqa: BLE001 — metadata is best-effort, don't fail ingest
             meta.extra["auto_error"] = str(e)
+
+    # Canonicalize the client name so variants map to one client.
+    if meta.client:
+        meta.client = clients.resolve(meta.client)
 
     chunks = chunk_blocks(blocks)
     if not chunks:

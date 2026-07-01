@@ -16,7 +16,7 @@ import argparse
 from rich.console import Console
 from rich.table import Table
 
-from lawrag import auth, db
+from lawrag import auth, clients, db
 
 console = Console()
 
@@ -38,29 +38,45 @@ def main() -> None:
     g = sub.add_parser("grant"); g.add_argument("username"); g.add_argument("client")
     r = sub.add_parser("revoke"); r.add_argument("username"); r.add_argument("client")
     sub.add_parser("list")
+
+    sub.add_parser("clients")  # list distinct client names + doc counts
+    m = sub.add_parser("merge")  # merge one client name into another (canonical)
+    m.add_argument("from_name"); m.add_argument("into_name")
     args = ap.parse_args()
 
     db.init_schema()  # ensure auth tables exist
 
     if args.cmd == "add":
-        auth.create_user(args.username, args.password, args.role, args.clients)
+        resolved = [clients.resolve(c) for c in args.clients]
+        auth.create_user(args.username, args.password, args.role, resolved)
         console.print(f"[green]created[/] {args.username} ({args.role}), "
-                      f"clients={args.clients or 'ALL' if args.role == 'admin' else args.clients}")
+                      f"clients={'ALL' if args.role == 'admin' else (resolved or '—')}")
     elif args.cmd == "passwd":
         auth.set_password(args.username, args.password)
         console.print(f"[green]password updated[/] for {args.username}")
     elif args.cmd == "grant":
-        auth.grant(args.username, args.client)
-        console.print(f"[green]granted[/] {args.username} -> {args.client}")
+        canonical = clients.resolve(args.client)
+        auth.grant(args.username, canonical)
+        console.print(f"[green]granted[/] {args.username} -> {canonical}")
     elif args.cmd == "revoke":
-        auth.revoke(args.username, args.client)
-        console.print(f"[yellow]revoked[/] {args.username} -> {args.client}")
+        auth.revoke(args.username, clients.resolve(args.client))
+        console.print(f"[yellow]revoked[/] {args.username} -> {clients.resolve(args.client)}")
     elif args.cmd == "list":
         table = Table("User", "Role", "Clients")
         for u in auth.list_users():
-            clients = "ALL" if u["role"] == "admin" else (", ".join(u["clients"]) or "—")
-            table.add_row(u["username"], u["role"], clients)
+            cl = "ALL" if u["role"] == "admin" else (", ".join(u["clients"]) or "—")
+            table.add_row(u["username"], u["role"], cl)
         console.print(table)
+    elif args.cmd == "clients":
+        table = Table("Client", "Documents")
+        for name, n in clients.client_counts():
+            table.add_row(name, str(n))
+        console.print(table)
+    elif args.cmd == "merge":
+        res = clients.merge(args.from_name, args.into_name)
+        console.print(f"[green]merged[/] '{args.from_name}' -> '{args.into_name}'  "
+                      f"(docs updated: {res['documents_updated']}, "
+                      f"grants updated: {res['grants_updated']})")
 
 
 if __name__ == "__main__":

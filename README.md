@@ -108,10 +108,21 @@ python scripts/user_admin.py revoke jchen "Acme Corp"
 python scripts/user_admin.py list
 ```
 
+### Client-name normalization
+
+So one real client isn't split across name variants, client names are canonicalized
+at ingest. Trivial variants merge automatically (case/punctuation/legal suffixes:
+"ACME CORP." == "Acme Corporation"). For variants a machine can't infer, an admin
+declares the mapping — which also rewrites existing documents and grants:
+
+```bash
+python scripts/user_admin.py clients                                # list clients + doc counts
+python scripts/user_admin.py merge "Richtech" "Richtech Robotics Inc."   # canonicalize
+```
+
 **Scope of this layer:** it is application-layer isolation. Production deployment
 still needs transport security (TLS/HTTPS — today it is plain HTTP over localhost/
-tailnet), optional SSO, and **client-name normalization** (e.g. "Richtech" vs
-"Richtech Robotics Inc." must map to one canonical client for grants to line up).
+tailnet) and optionally SSO.
 
 ## Layout
 
@@ -153,8 +164,10 @@ data/sample/    synthetic test documents
 - **Access control (done):** login + role-based, per-client ethical walls enforced
   server-side on all retrieval/stats/ingest, with an audit log (`lawrag/auth.py`,
   `scripts/user_admin.py`).
+- **Client-name normalization (done):** canonical client names at ingest + admin
+  `merge` to consolidate variants (`lawrag/clients.py`).
 - **Phase 1.5 / next:** OCR for scanned PDFs; tie extraction citations to ingested
-  chunk pages; client-name normalization; TLS/SSO hardening; deployment auto-start.
+  chunk pages; TLS/SSO hardening; deployment auto-start.
 - **Phase 3 (drafting, when trusted):** RAG-grounded drafting from precedents with a
   lawyer in the loop; optional LoRA for house style only — never for facts.
 
