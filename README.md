@@ -68,6 +68,9 @@ sudo docker start lawrag-db lawrag-embed lawrag-rerank lawrag-llm
 # Batch DD over a whole folder -> Excel comparison matrix + Word memo
 ./.venv/bin/python scripts/dd_batch.py /path/to/data_room --excel dd.xlsx --word dd.docx
 
+# Experimental: draft an 8-K Item disclosure from a contract (see "8-K drafting" below)
+./.venv/bin/python scripts/draft_8k.py /path/to/contract.docx --item 1.01
+
 # Generate synthetic sample docs for testing
 ./.venv/bin/python scripts/make_samples.py
 
@@ -131,6 +134,40 @@ python scripts/user_admin.py merge "Richtech" "Richtech Robotics Inc."   # canon
 still needs transport security (TLS/HTTPS — today it is plain HTTP over localhost/
 tailnet) and optionally SSO.
 
+## 8-K drafting (experiment)
+
+A first test of RAG-grounded drafting — deliberately **not** a fine-tuned model.
+SEC disclosures are fact-critical, so this stays retrieval + extraction:
+
+1. **Extract facts** from the source contract with the existing due-diligence
+   engine (same clause checklist, verbatim quotes).
+2. **Retrieve precedents** — prior 8-K filings of the *same Item number* already
+   in the library (`documents.meta->>'filing_item'`), used **only** for structure
+   and tone, never as a source of facts.
+3. **Draft** the Item disclosure with the LLM, instructed to use *only* the
+   extracted contract facts; every sentence is cited back to its verbatim quote
+   in `facts_used` so a lawyer can check it line-by-line instead of trusting the
+   prose. Missing facts are marked `[NOT STATED IN CONTRACT]`, never invented.
+
+```bash
+# Tag historical 8-Ks with their Item number at ingest (auto-detected, or manual):
+./.venv/bin/python scripts/ingest.py /path/to/old_8ks --doc-type 8-K --filing-item 1.01
+
+# Draft a new Item 1.01 disclosure from a contract that triggers one
+./.venv/bin/python scripts/draft_8k.py /path/to/contract.docx --item 1.01
+./.venv/bin/python scripts/draft_8k.py /path/to/contract.docx --item 1.01 --json
+```
+
+Started with **Item 1.01 (Entry into a Material Definitive Agreement)**: the most
+common trigger, most template-able disclosure, and its inputs (parties, term,
+payment, termination) map directly onto fields the due-diligence engine already
+extracts. Validated on synthetic data — precedent retrieval correctly scoped to
+the matching Item number, and the draft used only the input contract's own facts,
+with zero leakage from the precedent's names/dates/amounts. **Not yet run on real
+filings** — pending historical 8-Ks + contracts from Jiayi for a real quality
+review; other Item types (5.02, 2.01, ...) are the same pipeline plus a per-Item
+fact checklist once 1.01 is validated.
+
 ## Layout
 
 ```
@@ -145,12 +182,15 @@ lawrag/
   rerank.py     cross-encoder reranker client
   llm.py        LLM client (chat + guided-JSON structured output)
   summarize.py  due-diligence engine: clause extraction + risk flags + summary
-  metadata.py   auto-extract doc_type/title/parties/client/date at ingest
+  metadata.py   auto-extract doc_type/title/parties/client/date(/filing_item) at ingest
   export.py     batch DD export to Excel (matrix) + Word (memo)
   auth.py       users, per-client permissions, sessions, audit (ethical walls)
+  draft.py      experimental: draft an 8-K Item disclosure grounded in a contract's
+                extracted facts, using same-Item precedents as style reference only
   api.py        FastAPI backend (login/stats/search/summarize/ingest/export) + serves web/
 web/            local web UI (index.html, style.css, app.js) — no external assets
-scripts/        init_db / user_admin / ingest / query / summarize / dd_batch / serve / make_samples
+scripts/        init_db / user_admin / ingest / query / summarize / dd_batch / draft_8k /
+                serve / make_samples
 data/sample/    synthetic test documents
 ```
 
@@ -179,8 +219,10 @@ data/sample/    synthetic test documents
   (keyed by hash, gitignored) and served back via an access-scoped download link.
 - **Phase 1.5 / next:** OCR for scanned PDFs; tie extraction citations to ingested
   chunk pages; TLS/SSO hardening; deployment auto-start.
-- **Phase 3 (drafting, when trusted):** RAG-grounded drafting from precedents with a
-  lawyer in the loop; optional LoRA for house style only — never for facts.
+- **Phase 3 (drafting, experiment started):** 8-K Item 1.01 drafting grounded in
+  contract facts + same-Item precedents (`lawrag/draft.py`) — validated on synthetic
+  data, real-filing validation pending. Still RAG, not fine-tuning — see rationale
+  above and in project memory. LoRA remains reserved for house style only, never facts.
 
 ## Privacy notes
 
