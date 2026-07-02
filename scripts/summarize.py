@@ -42,12 +42,15 @@ def main() -> None:
     table = Table("Clause", "Value", "Source quote", show_lines=True)
     for cl in r.get("clauses", []):
         val = cl.get("value", "")
-        style = "dim" if val.strip().lower() in ("", "not found") else ""
+        found = val.strip().lower() not in ("", "not found")
+        style = "dim" if not found else ""
         quote = cl.get("quote", "")
         if len(quote) > 160:
             quote = quote[:160] + " ..."
+        if found and quote and cl.get("verified") is False:
+            quote = f"[red]⚠ UNVERIFIED — not found verbatim in source:[/] {quote}"
         table.add_row(f"[{style}]{cl.get('name','')}[/]" if style else cl.get("name", ""),
-                      val, f"[dim]{quote}[/]" if quote else "")
+                      val, f"[dim]{quote}[/]" if quote and not (found and cl.get("verified") is False) else quote)
     console.print(table)
 
     risks = r.get("key_risks", [])

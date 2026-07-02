@@ -58,6 +58,19 @@ _SYSTEM = (
 )
 
 
+def verify_quote(quote: str, source_text: str) -> bool:
+    """True if `quote` appears verbatim (whitespace-normalized) in `source_text`.
+
+    Extraction is instructed to always quote verbatim, but on messy real-world
+    documents (redactions, dense formatting) it occasionally paraphrases instead
+    -- this catches that so callers can flag an unverified citation rather than
+    silently trust it."""
+    if not quote or not quote.strip():
+        return False
+    norm = lambda s: " ".join(s.split())
+    return norm(quote) in norm(source_text)
+
+
 def _user_prompt(text: str) -> str:
     checklist = "\n".join(f"- {c}" for c in CHECKLIST)
     return (
@@ -113,6 +126,11 @@ def review_contract(path: str | Path) -> dict:
         windows = [full[i:i + step] for i in range(0, len(full), step)]
         result = _merge([_extract_pass(w) for w in windows])
 
+    for cl in result.get("clauses", []):
+        if cl.get("value", "").strip().lower() not in ("", "not found"):
+            cl["verified"] = verify_quote(cl.get("quote", ""), full)
+
     result["_source"] = path.name
     result["_pages"] = max((b.page or 0 for b in blocks), default=0) or None
+    result["_full_text"] = full
     return result

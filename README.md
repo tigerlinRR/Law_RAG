@@ -149,6 +149,11 @@ SEC disclosures are fact-critical, so this stays retrieval + extraction:
    extracted contract facts; every sentence is cited back to its verbatim quote
    in `facts_used` so a lawyer can check it line-by-line instead of trusting the
    prose. Missing facts are marked `[NOT STATED IN CONTRACT]`, never invented.
+   Every citation (here and in the due-diligence engine's clause quotes) is then
+   checked programmatically against the source text (`summarize.verify_quote`) —
+   a citation that isn't found verbatim is flagged `⚠ UNVERIFIED` rather than
+   silently trusted, since on messy real documents the model occasionally
+   paraphrases instead of quoting exactly.
 
 ```bash
 # Tag historical 8-Ks with their Item number(s) at ingest (auto-detected, or manual

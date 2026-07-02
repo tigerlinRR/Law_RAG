@@ -51,12 +51,19 @@ def main() -> None:
                   ("; ".join(precedents) if precedents else "[dim]none found in library[/]"))
 
     table = Table("Fact", "Source quote", show_lines=True, title="Fact -> source trace")
+    unverified = 0
     for f in r.get("facts_used", []):
         quote = f.get("source_quote", "")
         if len(quote) > 160:
             quote = quote[:160] + " ..."
+        if f.get("verified") is False:
+            unverified += 1
+            quote = f"[red]⚠ UNVERIFIED — not found verbatim in contract:[/] {quote}"
         table.add_row(f.get("fact", ""), quote)
     console.print(table)
+    if unverified:
+        console.print(f"[bold red]{unverified} citation(s) could not be verified "
+                       "verbatim against the source contract — check them by hand.[/]")
     console.print("[dim]Experimental: verify every row above against the source "
                   "contract before relying on this draft.[/]")
 

@@ -65,6 +65,7 @@ def search(
     use_rerank: bool | None = None,
     allowed_clients: list[str] | None = None,
     meta_filters: dict[str, str] | None = None,
+    exclude_document_ids: list[int] | None = None,
 ) -> list[Hit]:
     """`allowed_clients`: None = unrestricted (admin); a list = hard limit to those
     clients (ethical wall). An empty list means the caller may see nothing.
@@ -72,7 +73,11 @@ def search(
     `meta_filters`: containment filters against list-valued documents.meta fields,
     e.g. {"filing_items": "1.01"} matches any document whose meta.filing_items
     array includes "1.01" — a single 8-K commonly reports several Items at once,
-    so this is containment (JSONB @>), not exact equality."""
+    so this is containment (JSONB @>), not exact equality.
+
+    `exclude_document_ids`: hide specific documents from results — e.g. for a
+    held-out precedent-quality eval, exclude the real filing that resulted from
+    the very contract being drafted from, so it can't leak into its own "precedent"."""
     filters = filters or Filters()
     top_k = top_k or CONFIG.topk_final
     use_rerank = CONFIG.rerank_enabled if use_rerank is None else use_rerank
@@ -80,6 +85,9 @@ def search(
     for key, val in (meta_filters or {}).items():
         fwhere += " AND d.meta @> %s::jsonb"
         fparams.append(json.dumps({key: [val]}))
+    if exclude_document_ids:
+        fwhere += " AND NOT (d.id = ANY(%s))"
+        fparams.append(exclude_document_ids)
     # Mandatory access-control filter, applied on top of any user-chosen filters.
     if allowed_clients is not None:
         if not allowed_clients:

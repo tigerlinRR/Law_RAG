@@ -21,7 +21,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from . import llm, retrieve
-from .summarize import review_contract
+from .summarize import review_contract, verify_quote
 
 ITEM_TITLES = {
     "1.01": "Entry into a Material Definitive Agreement",
@@ -55,15 +55,18 @@ DRAFT_SCHEMA = {
 
 _SYSTEM = (
     "You are a securities lawyer drafting an SEC Form 8-K disclosure. You are given "
-    "(a) facts extracted from a source contract, each with a verbatim quote, and "
-    "(b) prior 8-K filings of the SAME item type, provided ONLY as structural/style "
-    "reference. Match the precedents' structure, tone, and level of detail. NEVER "
-    "reuse a precedent's facts (names, dates, amounts, counterparties) — every fact "
-    "in your draft must come from the source contract facts provided. If a fact the "
-    "disclosure normally needs is missing from the contract facts, write "
-    "'[NOT STATED IN CONTRACT]' instead of inventing it. For every factual sentence "
-    "in your draft, add one entry to 'facts_used' citing the exact verbatim quote it "
-    "is based on."
+    "(a) a contract summary for context plus a list of extracted clauses, each with "
+    "a verbatim quote, and (b) prior 8-K filings of the SAME item type, provided "
+    "ONLY as structural/style reference. Match the precedents' structure, tone, and "
+    "level of detail. NEVER reuse a precedent's facts (names, dates, amounts, "
+    "counterparties) — every fact in your draft must come from the source contract "
+    "facts provided. If a fact the disclosure normally needs is missing from the "
+    "contract facts, write '[NOT STATED IN CONTRACT]' instead of inventing it. For "
+    "every factual sentence in your draft, add one entry to 'facts_used': its "
+    "'source_quote' MUST be copied character-for-character from one of the listed "
+    "clause quotes (never from the contract-summary sentence, which is paraphrased "
+    "context, not a quotable source — if a sentence combines several clauses, add "
+    "one facts_used entry per clause quote it draws on)."
 )
 
 
@@ -95,9 +98,13 @@ def draft_8k(
     item: str = "1.01",
     n_precedents: int = 2,
     allowed_clients: list[str] | None = None,
+    exclude_document_ids: list[int] | None = None,
 ) -> dict:
     """Draft an 8-K Item disclosure for `contract_path`, grounded in facts extracted
-    from that contract, using same-Item historical filings as a style reference only."""
+    from that contract, using same-Item historical filings as a style reference only.
+
+    `exclude_document_ids`: for held-out evaluation — exclude the real 8-K that this
+    contract actually produced, so the "precedent" can't leak the answer."""
     item_title = ITEM_TITLES.get(item, "")
     review = review_contract(contract_path)
 
@@ -107,6 +114,7 @@ def draft_8k(
         top_k=n_precedents * 4,  # a few chunks per doc; grouped back into docs below
         allowed_clients=allowed_clients,
         meta_filters={"filing_items": item},
+        exclude_document_ids=exclude_document_ids,
         use_rerank=False,  # precedent lookup is exact-match by item; RRF order is fine
     )
     by_doc: dict[int, list] = {}
@@ -118,12 +126,15 @@ def draft_8k(
 
     result = llm.chat_json(
         _SYSTEM, _user_prompt(item, item_title, review, precedent_texts),
-        DRAFT_SCHEMA, max_tokens=2048,
+        DRAFT_SCHEMA, max_tokens=4096,
     )
     # Item/title are known inputs, not model output — set them deterministically
     # rather than trust free-form generation (which sometimes echoes precedent text).
     result["item"] = item
     result["item_title"] = item_title
+    full_text = review.get("_full_text", "")
+    for f in result.get("facts_used", []):
+        f["verified"] = verify_quote(f.get("source_quote", ""), full_text)
     result["_source_contract"] = Path(contract_path).name
     result["_precedents_used"] = precedent_citations
     result["_contract_summary"] = review.get("summary", "")
