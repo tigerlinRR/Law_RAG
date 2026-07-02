@@ -71,22 +71,22 @@ def verify_quote(quote: str, source_text: str) -> bool:
     return norm(quote) in norm(source_text)
 
 
-def _user_prompt(text: str) -> str:
-    checklist = "\n".join(f"- {c}" for c in CHECKLIST)
+def _user_prompt(text: str, checklist: list[str]) -> str:
+    checklist_block = "\n".join(f"- {c}" for c in checklist)
     return (
         "Review the contract below. Produce one 'clauses' entry for EACH checklist "
-        f"item, in this order:\n{checklist}\n\n"
+        f"item, in this order:\n{checklist_block}\n\n"
         "Also write a concise plain-language 'summary' (3-5 sentences), list the "
         "'parties', and list 'key_risks'.\n\n"
         f"=== CONTRACT TEXT ===\n{text}"
     )
 
 
-def _extract_pass(text: str) -> dict:
-    return llm.chat_json(_SYSTEM, _user_prompt(text), REVIEW_SCHEMA)
+def _extract_pass(text: str, checklist: list[str]) -> dict:
+    return llm.chat_json(_SYSTEM, _user_prompt(text, checklist), REVIEW_SCHEMA)
 
 
-def _merge(partials: list[dict]) -> dict:
+def _merge(partials: list[dict], checklist: list[str]) -> dict:
     """Reduce step for map-reduce: keep the first substantive value per clause."""
     merged = {"doc_type": "", "summary": "", "parties": [], "clauses": [], "key_risks": []}
     by_clause: dict[str, dict] = {}
@@ -102,7 +102,7 @@ def _merge(partials: list[dict]) -> dict:
             if name not in by_clause or (found and not
                     (by_clause[name]["value"].strip().lower() not in ("", "not found"))):
                 by_clause[name] = cl
-    merged["clauses"] = [by_clause[c] for c in CHECKLIST if c in by_clause] or \
+    merged["clauses"] = [by_clause[c] for c in checklist if c in by_clause] or \
         list(by_clause.values())
     # Summarize the concatenated per-part summaries into one.
     joined = " ".join(p.get("summary", "") for p in partials)
@@ -112,19 +112,24 @@ def _merge(partials: list[dict]) -> dict:
     return merged
 
 
-def review_contract(path: str | Path) -> dict:
-    """Parse a PDF/Word contract and return a structured due-diligence review."""
+def review_contract(path: str | Path, checklist: list[str] | None = None) -> dict:
+    """Parse a PDF/Word contract and return a structured due-diligence review.
+
+    `checklist` overrides the default general-commercial-contract CHECKLIST —
+    e.g. a financial-instrument checklist (principal/interest/maturity) for
+    documents that don't look like a services agreement."""
+    checklist = checklist or CHECKLIST
     path = Path(path)
     blocks = parse(path)
     full = "\n\n".join(b.text for b in blocks)
 
     if len(full) <= CONFIG.llm_max_ctx_chars:
-        result = _extract_pass(full)
+        result = _extract_pass(full, checklist)
     else:
         # Split into overlapping windows and map-reduce.
         step = CONFIG.llm_max_ctx_chars
         windows = [full[i:i + step] for i in range(0, len(full), step)]
-        result = _merge([_extract_pass(w) for w in windows])
+        result = _merge([_extract_pass(w, checklist) for w in windows], checklist)
 
     for cl in result.get("clauses", []):
         if cl.get("value", "").strip().lower() not in ("", "not found"):

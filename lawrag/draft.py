@@ -21,6 +21,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from . import llm, retrieve
+from .summarize import CHECKLIST as _DEFAULT_CHECKLIST
 from .summarize import review_contract, verify_quote
 
 ITEM_TITLES = {
@@ -31,6 +32,25 @@ ITEM_TITLES = {
     "3.02": "Unregistered Sales of Equity Securities",
     "5.02": "Departure/Election of Directors or Officers",
 }
+
+# Per-Item extraction checklists — a financial instrument needs principal/
+# interest/maturity, not services-contract terms like IP or exclusivity. Items
+# not listed here fall back to the default general-commercial-contract
+# checklist in summarize.py (fine for 1.01/1.02/2.01-style agreements).
+ITEM_CHECKLISTS: dict[str, list[str]] = {
+    "2.03": [
+        "Parties (Lender/Investor and Borrower)", "Instrument Date",
+        "Principal Amount", "Purchase Price / Original Issue Discount",
+        "Interest Rate", "Maturity Date", "Payment / Repayment Terms",
+        "Conversion Rights", "Redemption Rights",
+        "Related Agreements Referenced", "Security / Collateral",
+        "Default / Acceleration Provisions",
+    ],
+}
+
+
+def _checklist_for(item: str) -> list[str]:
+    return ITEM_CHECKLISTS.get(item, _DEFAULT_CHECKLIST)
 
 DRAFT_SCHEMA = {
     "type": "object",
@@ -106,7 +126,7 @@ def draft_8k(
     `exclude_document_ids`: for held-out evaluation — exclude the real 8-K that this
     contract actually produced, so the "precedent" can't leak the answer."""
     item_title = ITEM_TITLES.get(item, "")
-    review = review_contract(contract_path)
+    review = review_contract(contract_path, checklist=_checklist_for(item))
 
     hits = retrieve.search(
         f"8-K Item {item} {item_title}",

@@ -183,16 +183,31 @@ SEC disclosures are fact-critical, so this stays retrieval + extraction:
 Started with **Item 1.01 (Entry into a Material Definitive Agreement)**: the most
 common trigger, most template-able disclosure, and its inputs (parties, term,
 payment, termination) map directly onto fields the due-diligence engine already
-extracts. Validated end-to-end with **30 of Richtech's own real 8-K/8-K-A filings**
-(pulled from SEC EDGAR, Item numbers taken from EDGAR's own filing metadata — 17
-of the 30 report Item 1.01) as the precedent library: retrieval correctly scopes
-to Item 1.01 by array containment even though most real filings report several
-Items at once, and a test draft used only the input contract's own facts, with
-zero leakage from any precedent's names/dates/amounts. **Still pending from
-Jiayi:** a real contract paired with the 8-K it actually triggered, to compare
-the AI draft against what the firm really filed — that comparison, not this
-plumbing check, is the real quality test. Other Item types (5.02, 2.01, ...) are
-the same pipeline plus a per-Item fact checklist once 1.01 checks out.
+extracts. Precedent library is **30 of Richtech's own real 8-K/8-K-A filings**
+pulled from SEC EDGAR (Item numbers from EDGAR's own filing metadata — 17 of the
+30 report Item 1.01).
+
+**Item-specific extraction:** most real 8-Ks disclose several Items at once, and
+each Item type needs different facts — a financial instrument needs principal/
+interest/maturity, not services-contract terms like IP or exclusivity.
+`draft.ITEM_CHECKLISTS` lets an Item override the default general-commercial
+checklist passed to the due-diligence engine (`summarize.review_contract`);
+**Item 2.03 (Creation of a Direct Financial Obligation)** is built out this way
+as the second Item, using Richtech's real convertible-note filings as precedent.
+
+**Two real held-out quality tests done** (a real contract with its own real
+resulting 8-K excluded from its precedent pool, then compared against what was
+actually filed): Item 1.01 (a Master Services Agreement) and Item 2.03 (a
+convertible promissory note). Both confirm: facts that do get disclosed are
+extracted accurately (dates/amounts/rates all matched), and the model correctly
+declines to invent anything redacted or absent from the contract. **Consistent
+content gap found in both tests:** the draft is more exhaustive than what
+Richtech's actual counsel chose to disclose — real 8-Ks state only the most
+material terms in 1-2 tight paragraphs and defer everything else to the
+exhibit; the draft tends to enumerate every extracted checklist field. That's
+the next thing to fix — teaching the drafting prompt what to leave out, not
+just what to get right. Extending to more Item types (5.02, 2.01, ...) is the
+same pattern: add a checklist, find real precedents + a real held-out test.
 
 ## Layout
 
