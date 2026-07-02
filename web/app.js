@@ -17,6 +17,7 @@ document.querySelectorAll(".tab").forEach((tab) => {
     $("#view-" + tab.dataset.view).classList.add("active");
     if (tab.dataset.view === "library") loadLibrary();
     if (tab.dataset.view === "users") loadUsers();
+    if (tab.dataset.view === "history") loadHistory();
   });
 });
 
@@ -430,6 +431,120 @@ async function deleteDoc(d) {
   const res = await fetch(`/api/documents/${d.id}`, { method: "DELETE" });
   if (res.ok) { loadLibrary(); loadStats(); }
   else { alert("Delete failed"); }
+}
+
+/* ---------------- history (generated documents) ---------------- */
+const KIND_LABEL = { "8k_draft": "8-K draft" };
+
+async function loadHistory() {
+  const status = $("#historyStatus"), list = $("#historyList"), detail = $("#historyDetail");
+  detail.innerHTML = "";
+  status.className = "status";
+  status.innerHTML = '<span class="spinner"></span>Loading…';
+  list.innerHTML = "";
+  try {
+    const res = await fetch("/api/generations");
+    if (res.status === 401) { showLogin(); return; }
+    const items = (await res.json()).generations || [];
+    status.textContent = `${items.length} generated document${items.length === 1 ? "" : "s"}`;
+    renderHistoryList(items);
+  } catch (err) {
+    status.className = "status err";
+    status.textContent = "Failed: " + err.message;
+  }
+}
+
+function renderHistoryList(items) {
+  const list = $("#historyList");
+  list.innerHTML = "";
+  if (!items.length) { list.appendChild(el("p", "auto-note", "Nothing generated yet.")); return; }
+  const panel = el("div", "panel");
+  const table = el("table", "clauses");
+  table.innerHTML = "<thead><tr><th>Date</th><th>Type</th><th>Source</th>"
+    + "<th>Item</th><th>Client</th></tr></thead>";
+  const tb = el("tbody");
+  items.forEach((g) => {
+    const tr = el("tr", "hist-row");
+    tr.appendChild(el("td", null, g.created_at || ""));
+    tr.appendChild(el("td", null, KIND_LABEL[g.kind] || g.kind));
+    tr.appendChild(el("td", null, g.source_name || "—"));
+    tr.appendChild(el("td", null, g.item || "—"));
+    tr.appendChild(el("td", null, g.client || "—"));
+    tr.addEventListener("click", () => loadHistoryDetail(g.id));
+    tb.appendChild(tr);
+  });
+  table.appendChild(tb);
+  panel.appendChild(table);
+  list.appendChild(panel);
+}
+
+async function loadHistoryDetail(id) {
+  const detail = $("#historyDetail");
+  detail.innerHTML = '<div class="status"><span class="spinner"></span>Loading…</div>';
+  try {
+    const res = await fetch(`/api/generations/${id}`);
+    if (!res.ok) throw new Error("failed to load");
+    const g = await res.json();
+    detail.innerHTML = "";
+    if (g.kind === "8k_draft") renderDraftInto(g.result, detail, g);
+    else detail.appendChild(el("pre", null, JSON.stringify(g.result, null, 2)));
+  } catch (err) {
+    detail.innerHTML = "";
+    detail.appendChild(el("p", "status err", "Failed: " + err.message));
+  }
+}
+
+function renderDraftInto(r, report, meta) {
+  const head = el("div", "report-head");
+  const h2 = el("h2", null, `Item ${r.item} — ${r.item_title}`);
+  head.appendChild(h2);
+  report.appendChild(head);
+
+  const src = el("p", "auto-note",
+    `Source contract: ${r._source_contract || "—"}` +
+    (meta && meta.created_at ? `  ·  generated ${meta.created_at}` : ""));
+  report.appendChild(src);
+
+  const p = el("div", "panel");
+  p.appendChild(el("h3", null, "Disclosure (draft)"));
+  p.appendChild(el("div", "summary", r.disclosure || ""));
+  report.appendChild(p);
+
+  if (r._precedents_used && r._precedents_used.length) {
+    const pp = el("div", "panel");
+    pp.appendChild(el("h3", null, "Precedents used (style reference only)"));
+    const chips = el("div", "chips");
+    r._precedents_used.forEach((x) => chips.appendChild(el("span", "chip", x)));
+    pp.appendChild(chips);
+    report.appendChild(pp);
+  }
+
+  if (r.facts_used && r.facts_used.length) {
+    const fp = el("div", "panel");
+    fp.appendChild(el("h3", null, "Fact -> source trace"));
+    const table = el("table", "clauses");
+    table.innerHTML = "<thead><tr><th>Fact</th><th>Source quote</th></tr></thead>";
+    const tb = el("tbody");
+    r.facts_used.forEach((f) => {
+      const tr = el("tr");
+      tr.appendChild(el("td", null, f.fact || ""));
+      const q = el("td", "quote");
+      if (f.verified === false) {
+        q.appendChild(el("span", "warn-flag", "⚠ UNVERIFIED — "));
+      }
+      q.appendChild(document.createTextNode(f.source_quote || ""));
+      tr.appendChild(q);
+      tb.appendChild(tr);
+    });
+    table.appendChild(tb);
+    fp.appendChild(table);
+    report.appendChild(fp);
+  }
+
+  const d = el("div", "disclaimer");
+  d.textContent = "Experimental AI-drafted disclosure. Verify every row above against " +
+    "the source contract before relying on it — this is not a finished filing.";
+  report.appendChild(d);
 }
 
 /* ---------------- users (admin) ---------------- */

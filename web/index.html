@@ -46,6 +46,7 @@
     <button class="tab" data-view="library" role="tab">Library</button>
     <button class="tab" data-view="review" role="tab">Review a Contract</button>
     <button class="tab" data-view="add" role="tab">Add to Library</button>
+    <button class="tab" data-view="history" role="tab">History</button>
     <button class="tab admin-only" data-view="users" role="tab" hidden>Users</button>
   </nav>
 
@@ -101,6 +102,14 @@
 
       <div id="addStatus" class="status"></div>
       <div id="addResults" class="results"></div>
+    </section>
+
+    <!-- ===================== HISTORY ===================== -->
+    <section id="view-history" class="view">
+      <p class="dz-sub">AI-generated documents (currently: experimental 8-K drafts) — click one to review it in full.</p>
+      <div id="historyStatus" class="status"></div>
+      <div id="historyList"></div>
+      <div id="historyDetail" class="report"></div>
     </section>
 
     <!-- ===================== LIBRARY ===================== -->

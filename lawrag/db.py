@@ -102,6 +102,21 @@ CREATE TABLE IF NOT EXISTS client_aliases (
     alias_key     TEXT PRIMARY KEY,
     canonical     TEXT NOT NULL
 );
+
+-- generations: history of AI-generated documents (currently: 8-K drafts), so
+-- past output is browsable instead of ephemeral CLI/API output. Scoped by
+-- client like everything else (ethical wall).
+CREATE TABLE IF NOT EXISTS generations (
+    id            BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    kind          TEXT NOT NULL,              -- '8k_draft' (room for more kinds later)
+    source_name   TEXT,
+    client        TEXT,
+    item          TEXT,
+    created_by    TEXT,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    result        JSONB NOT NULL
+);
+CREATE INDEX IF NOT EXISTS generations_client_idx ON generations (client);
 """
 
 # Vector ANN index — created after data exists so HNSW builds well. Kept separate

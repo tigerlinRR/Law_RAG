@@ -185,6 +185,9 @@ table.clauses td.name { font-weight: 600; width: 20%; color: var(--ink); }
 table.clauses td.val { width: 42%; }
 table.clauses td.quote { width: 38%; color: var(--muted); font-size: 12.5px; font-style: italic; }
 table.clauses tr.absent td { color: #a7abb5; }
+table.clauses tr.hist-row { cursor: pointer; }
+table.clauses tr.hist-row:hover td { background: var(--line-soft); }
+table.clauses td.quote .warn-flag { color: var(--risk); font-style: normal; font-weight: 600; }
 
 .risks { border-color: #f0d6d4; }
 .risks h3 { color: var(--risk); }

@@ -20,6 +20,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+from lawrag import db, generations
 from lawrag.draft import draft_8k
 
 console = Console()
@@ -29,11 +30,19 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("path", type=Path)
     ap.add_argument("--item", default="1.01", help="8-K Item number, e.g. 1.01")
+    ap.add_argument("--client", help="client to tag this draft with (for the History tab)")
     ap.add_argument("--json", action="store_true", help="print raw JSON instead of a report")
+    ap.add_argument("--no-save", action="store_true", help="don't record this in generation history")
     args = ap.parse_args()
 
     with console.status(f"Drafting Item {args.item} disclosure from {args.path.name} ..."):
         r = draft_8k(args.path, item=args.item)
+
+    if not args.no_save:
+        db.init_schema()
+        gen_id = generations.save("8k_draft", r, source_name=args.path.name,
+                                   client=args.client, item=args.item)
+        console.print(f"[dim]Saved to history as generation #{gen_id}[/]")
 
     if args.json:
         print(json.dumps(r, ensure_ascii=False, indent=2))

@@ -93,6 +93,9 @@ A local web UI (`web/`, served by `lawrag/api.py`), gated by login. Views:
   Several files → a comparison table plus per-file reports. Export the whole batch
   to **Excel** (clause matrix + risks sheet) or **Word** (memo).
 - **Add to Library** — drag files in; type/parties/client/date auto-detected.
+- **History** — every AI-generated document (currently: experimental 8-K drafts
+  run via `scripts/draft_8k.py`), scoped by client. Click one to see the full
+  draft with its fact → source-quote trace and `⚠ UNVERIFIED` flags.
 - **Users** (admin only) — create users, set role (lawyer/admin), grant/revoke
   client access with checkboxes, reset passwords, delete users.
 
@@ -198,6 +201,7 @@ lawrag/
   auth.py       users, per-client permissions, sessions, audit (ethical walls)
   draft.py      experimental: draft an 8-K Item disclosure grounded in a contract's
                 extracted facts, using same-Item precedents as style reference only
+  generations.py  history of AI-generated documents (currently 8-K drafts), client-scoped
   api.py        FastAPI backend (login/stats/search/summarize/ingest/export) + serves web/
 web/            local web UI (index.html, style.css, app.js) — no external assets
 scripts/        init_db / user_admin / ingest / query / summarize / dd_batch / draft_8k /

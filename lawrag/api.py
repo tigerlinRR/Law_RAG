@@ -20,7 +20,7 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import auth, clients, db, export
+from . import auth, clients, db, export, generations
 from .config import ROOT
 from .ingest import DocMeta, ingest_file
 from .parsers import NeedsOCR
@@ -254,6 +254,21 @@ def delete_document(doc_id: int, user: dict = Depends(require_admin)) -> dict:
         conn.commit()
     auth.log(user["username"], "delete_document", str(doc_id))
     return {"ok": True}
+
+
+# ---------- generation history ----------
+@app.get("/api/generations")
+def api_generations(user: dict = Depends(current_user)) -> dict:
+    return {"generations": generations.list_for(user["allowed_clients"])}
+
+
+@app.get("/api/generations/{gen_id}")
+def api_generation_detail(gen_id: int, user: dict = Depends(current_user)) -> dict:
+    g = generations.get(gen_id, user["allowed_clients"])
+    if not g:
+        raise HTTPException(status_code=404, detail="not found")
+    auth.log(user["username"], "view_generation", str(gen_id))
+    return g
 
 
 # ---------- user management (admin only) ----------
