@@ -136,6 +136,7 @@ def draft_8k(
     for f in result.get("facts_used", []):
         f["verified"] = verify_quote(f.get("source_quote", ""), full_text)
     result["_source_contract"] = Path(contract_path).name
+    result["_doc_type"] = review.get("doc_type", "")
     result["_precedents_used"] = precedent_citations
     result["_contract_summary"] = review.get("summary", "")
     return result

@@ -159,6 +159,11 @@ SEC disclosures are fact-critical, so this stays retrieval + extraction:
    a citation that isn't found verbatim is flagged `⚠ UNVERIFIED` rather than
    silently trusted, since on messy real documents the model occasionally
    paraphrases instead of quoting exactly.
+4. **Export** mirrors an actual Form 8-K, not a generic report: SEC cover page
+   (registrant/EIN/address, checkboxes, securities table), the Item disclosure,
+   an Item 9.01 exhibit index, and a signature block, all stamped
+   `DRAFT — NOT FILED WITH THE SEC`. Our own transparency material (precedents,
+   fact trace) is a clearly separate appendix, never mixed into the filing text.
 
 ```bash
 # Tag historical 8-Ks with their Item number(s) at ingest (auto-detected, or manual
