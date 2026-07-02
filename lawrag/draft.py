@@ -18,6 +18,7 @@ against the citations, not trusted as a finished filing.
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from . import llm, retrieve
@@ -52,6 +53,36 @@ ITEM_CHECKLISTS: dict[str, list[str]] = {
 def _checklist_for(item: str) -> list[str]:
     return ITEM_CHECKLISTS.get(item, _DEFAULT_CHECKLIST)
 
+
+# Defined terms that name a party/role, not the instrument being disclosed — the
+# qualifier must reference the instrument ("the Note"), never the registrant.
+_PARTY_TERMS = {
+    "company", "investor", "holder", "vendor", "client", "purchaser", "seller",
+    "borrower", "lender", "buyer", "supplier", "party", "parties", "sec",
+    "registrant", "counterparty", "guarantor", "issuer", "lessor", "lessee",
+}
+
+
+def _ensure_exhibit_qualifier(disclosure: str) -> str:
+    """Every real 8-K Item disclosure closes with the standard 'qualified in its
+    entirety by reference to the full text... Exhibit 10.1' sentence. The model
+    usually writes it but occasionally drops it, so guarantee it — it's fixed
+    boilerplate, not a fact, and never needs a source citation."""
+    if "qualified in its entirety" in disclosure.lower():
+        return disclosure
+    # Pick the instrument's defined term, e.g. (the "Note") / (the "Agreement") —
+    # the FIRST defined term is usually a party ("the Company"), so skip party roles.
+    terms = re.findall(r'\(the [“”"]([A-Z][A-Za-z ]+?)[“”"]\)', disclosure)
+    noun = next((t for t in terms if t.strip().lower() not in _PARTY_TERMS), None) \
+        or (terms[0] if terms else "Agreement")
+    qualifier = (
+        f"The foregoing description of the {noun} does not purport to be complete and "
+        f"is qualified in its entirety by reference to the full text of such {noun}, a "
+        f"copy of which is filed as Exhibit 10.1 to this Current Report on Form 8-K and "
+        f"is incorporated herein by reference."
+    )
+    return disclosure.rstrip() + "\n\n" + qualifier
+
 DRAFT_SCHEMA = {
     "type": "object",
     "properties": {
@@ -74,19 +105,45 @@ DRAFT_SCHEMA = {
 }
 
 _SYSTEM = (
-    "You are a securities lawyer drafting an SEC Form 8-K disclosure. You are given "
-    "(a) a contract summary for context plus a list of extracted clauses, each with "
-    "a verbatim quote, and (b) prior 8-K filings of the SAME item type, provided "
-    "ONLY as structural/style reference. Match the precedents' structure, tone, and "
-    "level of detail. NEVER reuse a precedent's facts (names, dates, amounts, "
-    "counterparties) — every fact in your draft must come from the source contract "
-    "facts provided. If a fact the disclosure normally needs is missing from the "
-    "contract facts, write '[NOT STATED IN CONTRACT]' instead of inventing it. For "
-    "every factual sentence in your draft, add one entry to 'facts_used': its "
-    "'source_quote' MUST be copied character-for-character from one of the listed "
-    "clause quotes (never from the contract-summary sentence, which is paraphrased "
-    "context, not a quotable source — if a sentence combines several clauses, add "
-    "one facts_used entry per clause quote it draws on)."
+    "You are a securities lawyer drafting an SEC Form 8-K Item disclosure. A Form 8-K "
+    "disclosure is a BRIEF, investor-facing description of the MATERIAL terms of a "
+    "transaction — it is NOT a comprehensive summary of the contract. Real 8-K "
+    "disclosures are typically one to three short paragraphs that state the nature of "
+    "the transaction and only its most material commercial or economic terms, then "
+    "defer everything else to the full agreement filed as an exhibit.\n\n"
+    "You are given (a) facts extracted from the source contract, each with a verbatim "
+    "quote, and (b) prior 8-K filings of the SAME Item type. The precedents are your "
+    "model for HOW MUCH to include and WHICH KINDS of terms are material for this Item "
+    "type — match their length and selectivity, not just their tone. If the precedents "
+    "disclose only a handful of terms, you must be equally selective.\n\n"
+    "RULES:\n"
+    "1. Include only the material terms a reasonable investor needs: the nature of the "
+    "transaction, the parties, the date, and the key commercial/economic terms the "
+    "precedents show are material for this Item type. LEAVE OUT the rest.\n"
+    "2. Do NOT describe standard or protective/boilerplate provisions individually "
+    "(e.g. governing law, dispute resolution, confidentiality, indemnification, "
+    "limitation of liability, standard IP assignment, representations and warranties, "
+    "default/acceleration mechanics, ownership caps). If worth mentioning at all, "
+    "collapse them into a brief catch-all such as 'and other customary provisions' — "
+    "unless a specific provision is genuinely unusual AND material.\n"
+    "3. Do NOT write a clause-by-clause list or a 'Key terms include: - X - Y' "
+    "enumeration. Write flowing prose in the style of the precedents.\n"
+    "4. End with the standard qualifier, adapted to the instrument: 'The foregoing "
+    "description of the [Agreement/Note/etc.] does not purport to be complete and is "
+    "qualified in its entirety by reference to the full text of such [agreement/note], "
+    "a copy of which is filed as Exhibit 10.1 to this Current Report on Form 8-K and "
+    "is incorporated herein by reference.'\n"
+    "5. NEVER reuse a precedent's facts (names, dates, amounts, counterparties) — every "
+    "fact must come from the source contract facts. If a term the disclosure would "
+    "normally state is missing from the contract facts, write '[NOT STATED IN "
+    "CONTRACT]' rather than inventing it.\n"
+    "6. For each factual statement you DO disclose, add one entry to 'facts_used': "
+    "'fact' is that statement AS WORDED IN YOUR DISCLOSURE (a short sentence or "
+    "clause copied from what you wrote, NOT a category label like 'Parties' or "
+    "'Interest Rate'), and 'source_quote' MUST be copied character-for-character from "
+    "one of the listed clause quotes (never from the contract-summary sentence, which "
+    "is paraphrased context). Cite only the facts you actually disclose — fewer, "
+    "material facts is correct, not a shortcoming."
 )
 
 
@@ -152,6 +209,7 @@ def draft_8k(
     # rather than trust free-form generation (which sometimes echoes precedent text).
     result["item"] = item
     result["item_title"] = item_title
+    result["disclosure"] = _ensure_exhibit_qualifier(result.get("disclosure", ""))
     full_text = review.get("_full_text", "")
     for f in result.get("facts_used", []):
         f["verified"] = verify_quote(f.get("source_quote", ""), full_text)
@@ -159,4 +217,12 @@ def draft_8k(
     result["_doc_type"] = review.get("doc_type", "")
     result["_precedents_used"] = precedent_citations
     result["_contract_summary"] = review.get("summary", "")
+    # Full extraction (every checklist term found), so a reviewer can see what the
+    # disclosure deliberately LEFT OUT — the disclosure is intentionally selective,
+    # this keeps that selectivity transparent rather than hiding dropped terms.
+    result["_all_extracted_terms"] = [
+        {"name": c.get("name", ""), "value": c.get("value", "")}
+        for c in review.get("clauses", [])
+        if c.get("value", "").strip().lower() not in ("", "not found")
+    ]
     return result

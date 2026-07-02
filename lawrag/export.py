@@ -135,8 +135,15 @@ REGISTRANT = {
 
 
 def _report_date(draft: dict) -> str:
+    """The 8-K 'date of earliest event reported' — the transaction date, which
+    is almost always the first date stated in the disclosure ('On <date>, ...
+    entered into ...'). Fall back to any date in the cited facts."""
+    import re
+    m = re.search(r"\b([A-Z][a-z]+ \d{1,2}, \d{4})\b", draft.get("disclosure", ""))
+    if m:
+        return m.group(1)
     for f in draft.get("facts_used") or []:
-        m = __import__("re").search(r"\b(\w+ \d{1,2}, \d{4})\b", f.get("fact", ""))
+        m = re.search(r"\b([A-Z][a-z]+ \d{1,2}, \d{4})\b", f.get("fact", ""))
         if m:
             return m.group(1)
     return "[DATE]"
@@ -307,6 +314,22 @@ def draft_to_word(draft: dict) -> bytes:
             cells[1].text = f.get("source_quote", "")
             cells[2].text = "Yes" if f.get("verified") else "⚠ UNVERIFIED"
 
+    all_terms = draft.get("_all_extracted_terms") or []
+    if all_terms:
+        doc.add_heading("All terms extracted from the contract", level=2)
+        doc.add_paragraph(
+            "The disclosure above states only the material terms, following 8-K "
+            "convention. This is the full set the review engine extracted — use it to "
+            "confirm nothing material was left out of the disclosure.")
+        table = doc.add_table(rows=1, cols=2)
+        table.style = "Table Grid"
+        thdr = table.rows[0].cells
+        thdr[0].text, thdr[1].text = "Term", "Value"
+        for t in all_terms:
+            cells = table.add_row().cells
+            cells[0].text = t.get("name", "")
+            cells[1].text = t.get("value", "")
+
     buf = io.BytesIO()
     doc.save(buf)
     return buf.getvalue()
@@ -327,6 +350,10 @@ def _draft_html(draft: dict) -> str:
     )
     precedents = "".join(f"<li>{esc(p)}</li>" for p in draft.get("_precedents_used") or [])
     disclosure_html = "".join(f"<p>{esc(para)}</p>" for para in _disclosure_paragraphs(draft))
+    all_terms_rows = "".join(
+        f"<tr><td>{esc(t.get('name',''))}</td><td>{esc(t.get('value',''))}</td></tr>"
+        for t in draft.get("_all_extracted_terms") or []
+    )
     sec_rows = "".join(
         f"<tr><td>{esc(cls)}</td><td style='text-align:center'>{esc(sym)}</td>"
         f"<td style='text-align:center'>{esc(exch)}</td></tr>"
@@ -446,6 +473,7 @@ def _draft_html(draft: dict) -> str:
         AI-drafted disclosure; verify every fact below against the source contract before relying on any of it.</p>
         {"<h2>Precedents used (style reference only)</h2><ul>" + precedents + "</ul>" if precedents else ""}
         {"<h2>Fact -&gt; source trace</h2><table class='review'><thead><tr><th>Fact</th><th>Source quote</th><th>Verified</th></tr></thead><tbody>" + facts_rows + "</tbody></table>" if facts_rows else ""}
+        {"<h2>All terms extracted from the contract</h2><p class='appendix-note'>The disclosure states only the material terms, per 8-K convention. This is the full set the review engine extracted &mdash; use it to confirm nothing material was left out.</p><table class='review'><thead><tr><th>Term</th><th>Value</th></tr></thead><tbody>" + all_terms_rows + "</tbody></table>" if all_terms_rows else ""}
       </div>
     </body></html>"""
 

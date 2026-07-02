@@ -150,20 +150,25 @@ SEC disclosures are fact-critical, so this stays retrieval + extraction:
    already in the library (`documents.meta.filing_items`, a JSONB array — a real
    8-K commonly reports several Items at once, matched by containment, not exact
    equality), used **only** for structure and tone, never as a source of facts.
-3. **Draft** the Item disclosure with the LLM, instructed to use *only* the
-   extracted contract facts; every sentence is cited back to its verbatim quote
-   in `facts_used` so a lawyer can check it line-by-line instead of trusting the
-   prose. Missing facts are marked `[NOT STATED IN CONTRACT]`, never invented.
-   Every citation (here and in the due-diligence engine's clause quotes) is then
-   checked programmatically against the source text (`summarize.verify_quote`) —
-   a citation that isn't found verbatim is flagged `⚠ UNVERIFIED` rather than
-   silently trusted, since on messy real documents the model occasionally
-   paraphrases instead of quoting exactly.
+3. **Draft** the Item disclosure with the LLM as a real 8-K would read: a
+   **brief, selective** description of the *material* terms in one to three
+   paragraphs, not a comprehensive summary — standard/boilerplate provisions are
+   collapsed into a catch-all and the rest is deferred to the exhibit, calibrated
+   to the precedents' own length and selectivity. It uses *only* the extracted
+   contract facts; every disclosed fact is cited back to its verbatim quote in
+   `facts_used`, missing facts are marked `[NOT STATED IN CONTRACT]` (never
+   invented), and the standard "qualified in its entirety by reference to
+   Exhibit 10.1" closing is guaranteed. Every citation (here and in the
+   due-diligence engine's clause quotes) is checked programmatically against the
+   source text (`summarize.verify_quote`) — a citation not found verbatim is
+   flagged `⚠ UNVERIFIED` rather than silently trusted.
 4. **Export** mirrors an actual Form 8-K, not a generic report: SEC cover page
    (registrant/EIN/address, checkboxes, securities table), the Item disclosure,
    an Item 9.01 exhibit index, and a signature block, all stamped
-   `DRAFT — NOT FILED WITH THE SEC`. Our own transparency material (precedents,
-   fact trace) is a clearly separate appendix, never mixed into the filing text.
+   `DRAFT — NOT FILED WITH THE SEC`. A clearly separate appendix (never mixed
+   into the filing text) holds the precedents used, the fact→source-quote trace,
+   and **the full set of terms extracted from the contract** — so a reviewer can
+   confirm the selective disclosure didn't drop anything material.
 
 ```bash
 # Tag historical 8-Ks with their Item number(s) at ingest (auto-detected, or manual
@@ -198,15 +203,15 @@ as the second Item, using Richtech's real convertible-note filings as precedent.
 **Two real held-out quality tests done** (a real contract with its own real
 resulting 8-K excluded from its precedent pool, then compared against what was
 actually filed): Item 1.01 (a Master Services Agreement) and Item 2.03 (a
-convertible promissory note). Both confirm: facts that do get disclosed are
-extracted accurately (dates/amounts/rates all matched), and the model correctly
-declines to invent anything redacted or absent from the contract. **Consistent
-content gap found in both tests:** the draft is more exhaustive than what
-Richtech's actual counsel chose to disclose — real 8-Ks state only the most
-material terms in 1-2 tight paragraphs and defer everything else to the
-exhibit; the draft tends to enumerate every extracted checklist field. That's
-the next thing to fix — teaching the drafting prompt what to leave out, not
-just what to get right. Extending to more Item types (5.02, 2.01, ...) is the
+convertible promissory note). Both confirm: disclosed facts are extracted
+accurately (dates/amounts/rates all matched), and the model correctly declines
+to invent anything redacted or absent from the contract. An earlier version was
+too verbose — it enumerated every extracted term, where a real 8-K states only
+the material ones and defers the rest to the exhibit; the drafting step was
+reworked to be selective and calibrated to the precedents, and now produces
+one-to-three-paragraph disclosures close to the real filings' shape (the 1.01
+draft is ~2 tight paragraphs; the 2.03 draft roughly tracks the real filing
+paragraph-for-paragraph). Extending to more Item types (5.02, 2.01, ...) is the
 same pattern: add a checklist, find real precedents + a real held-out test.
 
 ## Layout
