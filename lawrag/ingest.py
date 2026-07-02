@@ -92,8 +92,8 @@ def ingest_file(path: Path, meta: DocMeta | None = None, auto: bool = False) -> 
                 meta.extra.setdefault("parties", md["parties"])
             if md.get("title"):
                 meta.extra.setdefault("title", md["title"])
-            if md.get("filing_item"):
-                meta.extra.setdefault("filing_item", md["filing_item"])
+            if md.get("filing_items"):
+                meta.extra.setdefault("filing_items", md["filing_items"])
             meta.extra["auto"] = True
         except Exception as e:  # noqa: BLE001 — metadata is best-effort, don't fail ingest
             meta.extra["auto_error"] = str(e)

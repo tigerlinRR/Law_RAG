@@ -141,17 +141,19 @@ SEC disclosures are fact-critical, so this stays retrieval + extraction:
 
 1. **Extract facts** from the source contract with the existing due-diligence
    engine (same clause checklist, verbatim quotes).
-2. **Retrieve precedents** — prior 8-K filings of the *same Item number* already
-   in the library (`documents.meta->>'filing_item'`), used **only** for structure
-   and tone, never as a source of facts.
+2. **Retrieve precedents** — prior 8-K filings that report the *same Item number*
+   already in the library (`documents.meta.filing_items`, a JSONB array — a real
+   8-K commonly reports several Items at once, matched by containment, not exact
+   equality), used **only** for structure and tone, never as a source of facts.
 3. **Draft** the Item disclosure with the LLM, instructed to use *only* the
    extracted contract facts; every sentence is cited back to its verbatim quote
    in `facts_used` so a lawyer can check it line-by-line instead of trusting the
    prose. Missing facts are marked `[NOT STATED IN CONTRACT]`, never invented.
 
 ```bash
-# Tag historical 8-Ks with their Item number at ingest (auto-detected, or manual):
-./.venv/bin/python scripts/ingest.py /path/to/old_8ks --doc-type 8-K --filing-item 1.01
+# Tag historical 8-Ks with their Item number(s) at ingest (auto-detected, or manual
+# — a filing can report several, e.g. Item 1.01 + Item 9.01 together):
+./.venv/bin/python scripts/ingest.py /path/to/old_8ks --doc-type 8-K --filing-item 1.01 9.01
 
 # Draft a new Item 1.01 disclosure from a contract that triggers one
 ./.venv/bin/python scripts/draft_8k.py /path/to/contract.docx --item 1.01
@@ -161,12 +163,16 @@ SEC disclosures are fact-critical, so this stays retrieval + extraction:
 Started with **Item 1.01 (Entry into a Material Definitive Agreement)**: the most
 common trigger, most template-able disclosure, and its inputs (parties, term,
 payment, termination) map directly onto fields the due-diligence engine already
-extracts. Validated on synthetic data — precedent retrieval correctly scoped to
-the matching Item number, and the draft used only the input contract's own facts,
-with zero leakage from the precedent's names/dates/amounts. **Not yet run on real
-filings** — pending historical 8-Ks + contracts from Jiayi for a real quality
-review; other Item types (5.02, 2.01, ...) are the same pipeline plus a per-Item
-fact checklist once 1.01 is validated.
+extracts. Validated end-to-end with **30 of Richtech's own real 8-K/8-K-A filings**
+(pulled from SEC EDGAR, Item numbers taken from EDGAR's own filing metadata — 17
+of the 30 report Item 1.01) as the precedent library: retrieval correctly scopes
+to Item 1.01 by array containment even though most real filings report several
+Items at once, and a test draft used only the input contract's own facts, with
+zero leakage from any precedent's names/dates/amounts. **Still pending from
+Jiayi:** a real contract paired with the 8-K it actually triggered, to compare
+the AI draft against what the firm really filed — that comparison, not this
+plumbing check, is the real quality test. Other Item types (5.02, 2.01, ...) are
+the same pipeline plus a per-Item fact checklist once 1.01 checks out.
 
 ## Layout
 

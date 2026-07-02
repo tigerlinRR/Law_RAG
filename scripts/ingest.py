@@ -30,15 +30,16 @@ def main() -> None:
     ap.add_argument("--doc-type", dest="doc_type")
     ap.add_argument("--author")
     ap.add_argument("--doc-date", dest="doc_date")
-    ap.add_argument("--filing-item", dest="filing_item",
-                     help="SEC 8-K Item number, e.g. 1.01 (manual override)")
+    ap.add_argument("--filing-item", dest="filing_items", nargs="+",
+                     help="SEC 8-K Item number(s), e.g. --filing-item 1.01 9.01 "
+                          "(manual override; a filing commonly reports several)")
     args = ap.parse_args()
 
     db.init_schema()
     meta = DocMeta(doc_type=args.doc_type, client=args.client, matter=args.matter,
                    author=args.author, doc_date=args.doc_date)
-    if args.filing_item:
-        meta.extra["filing_item"] = args.filing_item
+    if args.filing_items:
+        meta.extra["filing_items"] = args.filing_items
 
     files = iter_files(args.path)
     if not files:

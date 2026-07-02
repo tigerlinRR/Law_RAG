@@ -9,6 +9,7 @@ a caller's permitted scope simply becomes a mandatory filter.
 """
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 
 from . import db, embed, rerank as _rerank
@@ -68,15 +69,17 @@ def search(
     """`allowed_clients`: None = unrestricted (admin); a list = hard limit to those
     clients (ethical wall). An empty list means the caller may see nothing.
 
-    `meta_filters`: exact-match filters on the documents.meta JSONB column, e.g.
-    {"filing_item": "1.01"} to scope precedent search to a specific 8-K Item type."""
+    `meta_filters`: containment filters against list-valued documents.meta fields,
+    e.g. {"filing_items": "1.01"} matches any document whose meta.filing_items
+    array includes "1.01" — a single 8-K commonly reports several Items at once,
+    so this is containment (JSONB @>), not exact equality."""
     filters = filters or Filters()
     top_k = top_k or CONFIG.topk_final
     use_rerank = CONFIG.rerank_enabled if use_rerank is None else use_rerank
     fwhere, fparams = filters.where()
     for key, val in (meta_filters or {}).items():
-        fwhere += " AND d.meta->>%s = %s"
-        fparams += [key, val]
+        fwhere += " AND d.meta @> %s::jsonb"
+        fparams.append(json.dumps({key: [val]}))
     # Mandatory access-control filter, applied on top of any user-chosen filters.
     if allowed_clients is not None:
         if not allowed_clients:

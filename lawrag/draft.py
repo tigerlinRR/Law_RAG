@@ -106,7 +106,7 @@ def draft_8k(
         filters=retrieve.Filters(doc_type="8-K"),
         top_k=n_precedents * 4,  # a few chunks per doc; grouped back into docs below
         allowed_clients=allowed_clients,
-        meta_filters={"filing_item": item},
+        meta_filters={"filing_items": item},
         use_rerank=False,  # precedent lookup is exact-match by item; RRF order is fine
     )
     by_doc: dict[int, list] = {}
