@@ -34,18 +34,48 @@ ITEM_TITLES = {
     "5.02": "Departure/Election of Directors or Officers",
 }
 
-# Per-Item extraction checklists — a financial instrument needs principal/
-# interest/maturity, not services-contract terms like IP or exclusivity. Items
-# not listed here fall back to the default general-commercial-contract
-# checklist in summarize.py (fine for 1.01/1.02/2.01-style agreements).
+# Per-Item extraction checklists — each 8-K Item type discloses different facts,
+# so the due-diligence extraction is pointed at what THAT Item needs (a note
+# needs principal/interest/maturity; an equity sale needs securities/exemption).
+# Only Items driven by a source transactional DOCUMENT are listed — event-driven
+# Items with no underlying contract to draft from (bankruptcy, earnings,
+# delisting notices, auditor changes, vote results, Reg FD/other events) are
+# deliberately omitted; this tool drafts a disclosure FROM a document. Items not
+# listed fall back to the default general-commercial-contract checklist.
 ITEM_CHECKLISTS: dict[str, list[str]] = {
-    "2.03": [
+    "1.02": [  # Termination of a Material Definitive Agreement
+        "Parties", "Agreement Being Terminated (title and date)",
+        "Termination Date", "Reason / Trigger for Termination",
+        "Material Terms of Termination", "Termination Fees or Penalties",
+        "Surviving Obligations", "Related Agreements Referenced",
+    ],
+    "2.01": [  # Completion of Acquisition or Disposition of Assets
+        "Parties (Acquirer and Seller)", "Acquisition or Disposition",
+        "Assets or Business Involved", "Closing / Completion Date",
+        "Consideration / Purchase Price", "Form of Consideration (cash/stock/other)",
+        "Material Terms and Conditions", "Related Agreements Referenced",
+    ],
+    "2.03": [  # Creation of a Direct Financial Obligation
         "Parties (Lender/Investor and Borrower)", "Instrument Date",
         "Principal Amount", "Purchase Price / Original Issue Discount",
         "Interest Rate", "Maturity Date", "Payment / Repayment Terms",
         "Conversion Rights", "Redemption Rights",
         "Related Agreements Referenced", "Security / Collateral",
         "Default / Acceleration Provisions",
+    ],
+    "3.02": [  # Unregistered Sales of Equity Securities
+        "Issuer", "Purchaser(s) / Investor(s)",
+        "Securities Sold (type and class)", "Date of Sale",
+        "Number of Shares or Units", "Consideration / Price per Security",
+        "Exemption Relied Upon", "Conversion or Exercise Terms",
+        "Use of Proceeds", "Related Agreements Referenced",
+    ],
+    "5.02": [  # Departure/Election of Directors or Officers
+        "Individual Name", "Position / Title",
+        "Nature of Event (appointment/departure/resignation)",
+        "Effective Date", "Reason (if departure)",
+        "Compensatory Arrangement / Terms", "Agreement or Plan Type",
+        "Related Agreements Referenced",
     ],
 }
 

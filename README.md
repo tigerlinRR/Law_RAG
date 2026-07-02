@@ -196,23 +196,40 @@ pulled from SEC EDGAR (Item numbers from EDGAR's own filing metadata — 17 of t
 each Item type needs different facts — a financial instrument needs principal/
 interest/maturity, not services-contract terms like IP or exclusivity.
 `draft.ITEM_CHECKLISTS` lets an Item override the default general-commercial
-checklist passed to the due-diligence engine (`summarize.review_contract`);
-**Item 2.03 (Creation of a Direct Financial Obligation)** is built out this way
-as the second Item, using Richtech's real convertible-note filings as precedent.
+checklist passed to the due-diligence engine (`summarize.review_contract`).
 
-**Two real held-out quality tests done** (a real contract with its own real
-resulting 8-K excluded from its precedent pool, then compared against what was
-actually filed): Item 1.01 (a Master Services Agreement) and Item 2.03 (a
-convertible promissory note). Both confirm: disclosed facts are extracted
-accurately (dates/amounts/rates all matched), and the model correctly declines
-to invent anything redacted or absent from the contract. An earlier version was
+**Items covered.** Every 8-K Item that is driven by a source transactional
+*document* (the thing this tool drafts *from*) now has a tailored checklist:
+
+| Item | Title | Extraction focus |
+|------|-------|------------------|
+| 1.01 | Entry into a Material Definitive Agreement | parties, term, key commercial terms (default checklist) |
+| 1.02 | Termination of a Material Definitive Agreement | agreement terminated, date, reason, fees, surviving obligations |
+| 2.01 | Completion of Acquisition or Disposition of Assets | parties, assets, closing date, consideration |
+| 2.03 | Creation of a Direct Financial Obligation | principal, discount, interest, maturity, conversion, redemption |
+| 3.02 | Unregistered Sales of Equity Securities | securities, price, exemption relied upon, use of proceeds |
+| 5.02 | Departure/Election of Directors or Officers | name, position, event, effective date, compensatory terms |
+
+*Deliberately excluded* are event-driven Items with no underlying contract to
+draft from — bankruptcy (1.03), results of operations (2.02), delisting notices
+(3.01), auditor changes (4.01/4.02), vote results (5.07), and Regulation FD /
+other events (7.01/8.01). This tool drafts a disclosure *from a document*; those
+Items don't have one.
+
+**Three real held-out tests done** (a real contract with its own real resulting
+8-K excluded from its precedent pool, then compared against what was actually
+filed): Item 1.01 (Master Services Agreement), Item 2.03 (convertible promissory
+note), and Item 3.02 (securities purchase agreement). All confirm disclosed
+facts are extracted accurately (dates/amounts/rates/exemptions all matched) and
+the model declines to invent anything redacted or absent. An earlier version was
 too verbose — it enumerated every extracted term, where a real 8-K states only
 the material ones and defers the rest to the exhibit; the drafting step was
 reworked to be selective and calibrated to the precedents, and now produces
-one-to-three-paragraph disclosures close to the real filings' shape (the 1.01
-draft is ~2 tight paragraphs; the 2.03 draft roughly tracks the real filing
-paragraph-for-paragraph). Extending to more Item types (5.02, 2.01, ...) is the
-same pattern: add a checklist, find real precedents + a real held-out test.
+one-to-three-paragraph disclosures close to the real filings' shape. Items 1.02,
+2.01 and 5.02 are wired with checklists but not yet held-out-tested (no clean
+source document was on hand); they draft the same way once a real document is
+supplied. **Next: a lawyer reviews the drafts** — this stays an experiment
+requiring sign-off, and RAG-grounded, never fine-tuned.
 
 ## Layout
 
