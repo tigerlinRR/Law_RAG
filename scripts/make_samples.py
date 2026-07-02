@@ -44,19 +44,6 @@ make_docx(
     ],
 )
 
-make_docx(
-    "acme_beta_nda_2022.docx",
-    "Mutual Non-Disclosure Agreement",
-    [
-        "This Mutual Non-Disclosure Agreement is entered into between Acme Manufacturing "
-        "LLC and Beta Components Inc. as of March 1, 2022.",
-        "Each party agrees to hold the other party's Confidential Information in strict "
-        "confidence and not to disclose it to any third party for a period of five years.",
-        "Confidential Information does not include information that becomes publicly "
-        "available through no breach of this Agreement.",
-    ],
-)
-
 make_pdf(
     "richtech_equity_plan_2020.pdf",
     "Richtech Robotics Inc. — 2020 Equity Incentive Plan",
