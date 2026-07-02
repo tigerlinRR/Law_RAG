@@ -226,9 +226,11 @@ data/sample/    synthetic test documents
 - **Phase 1.5 / next:** OCR for scanned PDFs; tie extraction citations to ingested
   chunk pages; TLS/SSO hardening; deployment auto-start.
 - **Phase 3 (drafting, experiment started):** 8-K Item 1.01 drafting grounded in
-  contract facts + same-Item precedents (`lawrag/draft.py`) — validated on synthetic
-  data, real-filing validation pending. Still RAG, not fine-tuning — see rationale
-  above and in project memory. LoRA remains reserved for house style only, never facts.
+  contract facts + same-Item precedents (`lawrag/draft.py`), precedent library now
+  30 of Richtech's real 8-Ks from SEC EDGAR — pending a real contract paired with
+  the 8-K it triggered for the actual quality comparison. Still RAG, not fine-tuning
+  — see rationale above and in project memory. LoRA remains reserved for house
+  style only, never facts.
 
 ## Privacy notes
 

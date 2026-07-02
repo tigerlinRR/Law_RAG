@@ -16,3 +16,6 @@ storage/
 # Local artifacts
 *.log
 *.png
+
+# Chinese README — kept in sync locally, never published to GitHub
+README.zh-CN.md

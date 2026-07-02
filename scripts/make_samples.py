@@ -108,52 +108,6 @@ make_docx(
     ],
 )
 
-# --- 8-K drafting experiment samples -----------------------------------------
-# A synthetic HISTORICAL Item 1.01 8-K (precedent, for style/structure only) and a
-# NEW supply contract (the drafting input) with a different counterparty/terms, so
-# we can verify the drafted disclosure pulls facts from the new contract and never
-# leaks the precedent's counterparty name, date, or dollar amount.
-make_docx(
-    "richtech_8k_2022_item101.docx",
-    "Richtech Robotics Inc. — Form 8-K",
-    [
-        "Item 1.01 Entry into a Material Definitive Agreement.",
-        "On June 3, 2022, Richtech Robotics Inc. (the \"Company\") entered into a "
-        "Manufacturing Services Agreement (the \"Agreement\") with Orion Precision "
-        "Manufacturing LLC (\"Orion\"), pursuant to which Orion will manufacture "
-        "certain robotic subassemblies for the Company.",
-        "The Agreement has an initial term of two (2) years and provides for "
-        "aggregate minimum purchase commitments by the Company of approximately "
-        "$4.2 million over the term. Either party may terminate the Agreement for "
-        "an uncured material breach upon thirty (30) days' written notice.",
-        "The foregoing description of the Agreement does not purport to be complete "
-        "and is subject to the actual terms of the Agreement.",
-    ],
-)
-
-make_docx(
-    "richtech_vertex_supply_2024.docx",
-    "Supply Agreement",
-    [
-        "This Supply Agreement (the \"Agreement\") is entered into as of September "
-        "10, 2024 (the \"Effective Date\") by and between Richtech Robotics Inc. "
-        "(\"Buyer\") and Vertex Robotics Components Inc. (\"Supplier\").",
-        "1. Term. This Agreement shall commence on the Effective Date and continue "
-        "for an initial term of three (3) years.",
-        "2. Purchase Commitment. Buyer commits to purchase not less than $7.5 "
-        "million in aggregate product volume over the initial term.",
-        "3. Termination. Either party may terminate this Agreement upon a material "
-        "breach that remains uncured for forty-five (45) days following written "
-        "notice.",
-        "4. Payment Terms. Buyer shall pay all undisputed invoices within forty-five "
-        "(45) days of receipt.",
-        "5. Exclusivity. Supplier agrees not to supply competing robotic components "
-        "to any direct competitor of Buyer during the term of this Agreement.",
-        "6. Governing Law. This Agreement shall be governed by the laws of the "
-        "State of Delaware.",
-    ],
-)
-
 print("Wrote sample docs to", OUT)
 for p in sorted(OUT.iterdir()):
     print("  ", p.name)
