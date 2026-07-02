@@ -38,6 +38,7 @@ Python env:
 ```bash
 python3 -m venv .venv && ./.venv/bin/pip install -r requirements.txt
 export PYTHONPATH=$PWD
+./.venv/bin/python -m playwright install chromium   # one-time: needed for PDF export of 8-K drafts
 ```
 
 ## Usage
@@ -95,7 +96,8 @@ A local web UI (`web/`, served by `lawrag/api.py`), gated by login. Views:
 - **Add to Library** — drag files in; type/parties/client/date auto-detected.
 - **History** — every AI-generated document (currently: experimental 8-K drafts
   run via `scripts/draft_8k.py`), scoped by client. Click one to see the full
-  draft with its fact → source-quote trace and `⚠ UNVERIFIED` flags.
+  draft with its fact → source-quote trace and `⚠ UNVERIFIED` flags, and
+  download it as **Word** or **PDF** — not just on-screen text.
 - **Users** (admin only) — create users, set role (lawyer/admin), grant/revoke
   client access with checkboxes, reset passwords, delete users.
 
@@ -166,6 +168,11 @@ SEC disclosures are fact-critical, so this stays retrieval + extraction:
 # Draft a new Item 1.01 disclosure from a contract that triggers one
 ./.venv/bin/python scripts/draft_8k.py /path/to/contract.docx --item 1.01
 ./.venv/bin/python scripts/draft_8k.py /path/to/contract.docx --item 1.01 --json
+
+# Every draft is saved to the History tab by default (--client to tag it, --no-save to
+# skip); also write it out as a file:
+./.venv/bin/python scripts/draft_8k.py /path/to/contract.docx --item 1.01 \
+    --client "Richtech Robotics Inc." --docx draft.docx --pdf draft.pdf
 ```
 
 Started with **Item 1.01 (Entry into a Material Definitive Agreement)**: the most
@@ -197,7 +204,7 @@ lawrag/
   llm.py        LLM client (chat + guided-JSON structured output)
   summarize.py  due-diligence engine: clause extraction + risk flags + summary
   metadata.py   auto-extract doc_type/title/parties/client/date(/filing_item) at ingest
-  export.py     batch DD export to Excel (matrix) + Word (memo)
+  export.py     batch DD export to Excel (matrix) + Word (memo); 8-K draft export to Word/PDF
   auth.py       users, per-client permissions, sessions, audit (ethical walls)
   draft.py      experimental: draft an 8-K Item disclosure grounded in a contract's
                 extracted facts, using same-Item precedents as style reference only

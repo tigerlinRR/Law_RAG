@@ -271,6 +271,29 @@ def api_generation_detail(gen_id: int, user: dict = Depends(current_user)) -> di
     return g
 
 
+def _get_generation_or_404(gen_id: int, user: dict) -> dict:
+    g = generations.get(gen_id, user["allowed_clients"])
+    if not g:
+        raise HTTPException(status_code=404, detail="not found")
+    return g
+
+
+@app.get("/api/generations/{gen_id}/export/word")
+def export_generation_word(gen_id: int, user: dict = Depends(current_user)) -> StreamingResponse:
+    g = _get_generation_or_404(gen_id, user)
+    data = export.draft_to_word(g["result"])
+    return StreamingResponse(io.BytesIO(data), media_type=_DOCX, headers={
+        "Content-Disposition": f'attachment; filename="8k-draft-{gen_id}.docx"'})
+
+
+@app.get("/api/generations/{gen_id}/export/pdf")
+def export_generation_pdf(gen_id: int, user: dict = Depends(current_user)) -> StreamingResponse:
+    g = _get_generation_or_404(gen_id, user)
+    data = export.draft_to_pdf(g["result"])
+    return StreamingResponse(io.BytesIO(data), media_type="application/pdf", headers={
+        "Content-Disposition": f'attachment; filename="8k-draft-{gen_id}.pdf"'})
+
+
 # ---------- user management (admin only) ----------
 class NewUser(BaseModel):
     username: str

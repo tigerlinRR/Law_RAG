@@ -20,7 +20,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from lawrag import db, generations
+from lawrag import db, export, generations
 from lawrag.draft import draft_8k
 
 console = Console()
@@ -33,6 +33,8 @@ def main() -> None:
     ap.add_argument("--client", help="client to tag this draft with (for the History tab)")
     ap.add_argument("--json", action="store_true", help="print raw JSON instead of a report")
     ap.add_argument("--no-save", action="store_true", help="don't record this in generation history")
+    ap.add_argument("--docx", type=Path, help="also write the draft to this .docx path")
+    ap.add_argument("--pdf", type=Path, help="also write the draft to this .pdf path")
     args = ap.parse_args()
 
     with console.status(f"Drafting Item {args.item} disclosure from {args.path.name} ..."):
@@ -43,6 +45,14 @@ def main() -> None:
         gen_id = generations.save("8k_draft", r, source_name=args.path.name,
                                    client=args.client, item=args.item)
         console.print(f"[dim]Saved to history as generation #{gen_id}[/]")
+
+    if args.docx:
+        args.docx.write_bytes(export.draft_to_word(r))
+        console.print(f"[dim]Wrote {args.docx}[/]")
+    if args.pdf:
+        with console.status("Rendering PDF..."):
+            args.pdf.write_bytes(export.draft_to_pdf(r))
+        console.print(f"[dim]Wrote {args.pdf}[/]")
 
     if args.json:
         print(json.dumps(r, ensure_ascii=False, indent=2))

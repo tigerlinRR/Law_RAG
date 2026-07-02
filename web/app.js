@@ -505,6 +505,18 @@ function renderDraftInto(r, report, meta) {
     (meta && meta.created_at ? `  ·  generated ${meta.created_at}` : ""));
   report.appendChild(src);
 
+  if (meta && meta.id != null) {
+    const bar = el("div", "exportbar");
+    bar.appendChild(el("span", "exp-label", "Download:"));
+    const doc = el("a", "btn-ghost", "Word (.docx)");
+    doc.href = `/api/generations/${meta.id}/export/word`;
+    const pdf = el("a", "btn-ghost", "PDF");
+    pdf.href = `/api/generations/${meta.id}/export/pdf`;
+    bar.appendChild(doc);
+    bar.appendChild(pdf);
+    report.appendChild(bar);
+  }
+
   const p = el("div", "panel");
   p.appendChild(el("h3", null, "Disclosure (draft)"));
   p.appendChild(el("div", "summary", r.disclosure || ""));

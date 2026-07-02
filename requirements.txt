@@ -12,3 +12,4 @@ fastapi>=0.115        # local web API
 uvicorn>=0.30         # ASGI server
 python-multipart>=0.0.9  # file uploads
 openpyxl>=3.1         # Excel export of DD comparison matrix
+playwright>=1.45      # renders 8-K draft exports to PDF (run once: playwright install chromium)

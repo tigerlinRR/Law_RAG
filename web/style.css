@@ -218,6 +218,7 @@ table.clauses td.quote .warn-flag { color: var(--risk); font-style: normal; font
   font-family: var(--sans); font-size: 13px; font-weight: 600; color: var(--ink);
   background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
   padding: 7px 14px; cursor: pointer; transition: .15s;
+  display: inline-block; text-decoration: none;
 }
 .btn-ghost:hover { border-color: var(--accent); color: var(--accent-dk); }
 .det { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
