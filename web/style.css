@@ -117,6 +117,13 @@ body {
 }
 .filters .toggle { cursor: pointer; }
 
+.gen-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; margin: 16px 2px; }
+.gen-controls label { font-size: 13px; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+.gen-controls select {
+  font-family: var(--sans); font-size: 13px; color: var(--ink);
+  padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface);
+}
+
 /* ---------- status / empty ---------- */
 .status { font-size: 14px; color: var(--muted); margin: 18px 2px; min-height: 20px; }
 .status.err { color: var(--risk); }

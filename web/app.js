@@ -18,6 +18,7 @@ document.querySelectorAll(".tab").forEach((tab) => {
     if (tab.dataset.view === "library") loadLibrary();
     if (tab.dataset.view === "users") loadUsers();
     if (tab.dataset.view === "history") loadHistory();
+    if (tab.dataset.view === "generate") initGenerate();
   });
 });
 
@@ -431,6 +432,69 @@ async function deleteDoc(d) {
   const res = await fetch(`/api/documents/${d.id}`, { method: "DELETE" });
   if (res.ok) { loadLibrary(); loadStats(); }
   else { alert("Delete failed"); }
+}
+
+/* ---------------- generate 8-K ---------------- */
+let genItemsLoaded = false;
+
+async function initGenerate() {
+  // Populate the client dropdown from the user's in-scope clients (same source
+  // as the search filter), and the Item dropdown from the server once.
+  try {
+    const s = await (await fetch("/api/stats")).json();
+    const csel = $("#gen-client");
+    csel.innerHTML = "";
+    (s.clients || []).forEach((c) => csel.appendChild(new Option(c, c)));
+    if (!csel.options.length) csel.appendChild(new Option("(no clients in library yet)", ""));
+  } catch (e) { /* leave as-is */ }
+
+  if (!genItemsLoaded) {
+    try {
+      const d = await (await fetch("/api/draft-items")).json();
+      const isel = $("#gen-item");
+      isel.innerHTML = "";
+      (d.items || []).forEach((it) =>
+        isel.appendChild(new Option(`Item ${it.item} — ${it.title}`, it.item)));
+      genItemsLoaded = true;
+    } catch (e) { /* leave as-is */ }
+  }
+}
+
+const gz = $("#genzone"), genInput = $("#genInput");
+gz.addEventListener("click", () => genInput.click());
+genInput.addEventListener("change", () => { if (genInput.files.length) generate8k(genInput.files[0]); });
+["dragover", "dragenter"].forEach((ev) =>
+  gz.addEventListener(ev, (e) => { e.preventDefault(); gz.classList.add("drag"); }));
+["dragleave", "drop"].forEach((ev) =>
+  gz.addEventListener(ev, (e) => { e.preventDefault(); gz.classList.remove("drag"); }));
+gz.addEventListener("drop", (e) => { if (e.dataTransfer.files.length) generate8k(e.dataTransfer.files[0]); });
+
+async function generate8k(file) {
+  const status = $("#genStatus"), report = $("#genReport");
+  report.innerHTML = "";
+  const item = $("#gen-item").value, client = $("#gen-client").value;
+  status.className = "status";
+  status.innerHTML =
+    `<span class="spinner"></span>Drafting Item ${item} from ${escapeHtml(file.name)} — ` +
+    "extracting facts, finding precedents, drafting… (~1 min)";
+
+  const fd = new FormData();
+  fd.append("file", file);
+  fd.append("item", item);
+  fd.append("client", client);
+  try {
+    const res = await fetch("/api/generate/8k", { method: "POST", body: fd });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "generation failed");
+    status.textContent = "";
+    const note = el("p", "auto-note",
+      "Saved to History — you can reopen or download it from the History tab any time.");
+    report.appendChild(note);
+    renderDraftInto(data.result, report, { id: data.id });
+  } catch (err) {
+    status.className = "status err";
+    status.textContent = "Generation failed: " + err.message;
+  }
 }
 
 /* ---------------- history (generated documents) ---------------- */

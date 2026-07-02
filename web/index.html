@@ -46,6 +46,7 @@
     <button class="tab" data-view="library" role="tab">Library</button>
     <button class="tab" data-view="review" role="tab">Review a Contract</button>
     <button class="tab" data-view="add" role="tab">Add to Library</button>
+    <button class="tab" data-view="generate" role="tab">Generate 8-K</button>
     <button class="tab" data-view="history" role="tab">History</button>
     <button class="tab admin-only" data-view="users" role="tab" hidden>Users</button>
   </nav>
@@ -102,6 +103,28 @@
 
       <div id="addStatus" class="status"></div>
       <div id="addResults" class="results"></div>
+    </section>
+
+    <!-- ===================== GENERATE 8-K ===================== -->
+    <section id="view-generate" class="view">
+      <p class="dz-sub">Draft an SEC Form 8-K Item disclosure from a contract, grounded in the
+        contract's own facts and prior filings of the same Item type. Experimental — every
+        draft must be reviewed by a lawyer before any use.</p>
+      <div class="gen-controls">
+        <label>8-K Item <select id="gen-item"></select></label>
+        <label>Client <select id="gen-client"></select></label>
+      </div>
+      <div id="genzone" class="dropzone">
+        <svg viewBox="0 0 24 24" width="40" height="40" aria-hidden="true">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm-1 7V3.5L18.5 9H13zM8 13h8v2H8v-2zm0 3h5v2H8v-2z"
+                fill="currentColor"/>
+        </svg>
+        <p class="dz-title">Drop the triggering contract here, or <span class="link">browse</span></p>
+        <p class="dz-sub">PDF or Word · one contract · drafted locally · takes ~1 minute</p>
+        <input id="genInput" type="file" accept=".pdf,.docx" hidden>
+      </div>
+      <div id="genStatus" class="status"></div>
+      <div id="genReport" class="report"></div>
     </section>
 
     <!-- ===================== HISTORY ===================== -->

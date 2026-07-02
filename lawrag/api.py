@@ -15,13 +15,14 @@ import tempfile
 from dataclasses import asdict
 from pathlib import Path
 
-from fastapi import Cookie, Depends, FastAPI, File, HTTPException, Response, UploadFile
+from fastapi import Cookie, Depends, FastAPI, File, Form, HTTPException, Response, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import auth, clients, db, export, generations
 from .config import ROOT
+from .draft import ITEM_TITLES, draft_8k
 from .ingest import DocMeta, ingest_file
 from .parsers import NeedsOCR
 from .retrieve import Filters, search
@@ -179,6 +180,48 @@ async def api_ingest(files: list[UploadFile] = File(...), user: dict = Depends(c
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
     return {"results": results}
+
+
+# ---------- 8-K drafting ----------
+@app.get("/api/draft-items")
+def api_draft_items(user: dict = Depends(current_user)) -> dict:
+    """8-K Item types this tool can draft (each has a tailored extraction checklist)."""
+    return {"items": [{"item": k, "title": v} for k, v in ITEM_TITLES.items()]}
+
+
+@app.post("/api/generate/8k", response_model=None)
+async def api_generate_8k(file: UploadFile = File(...), item: str = Form("1.01"),
+                          client: str = Form(""), user: dict = Depends(current_user)):
+    """Draft an 8-K Item disclosure from an uploaded contract and save it to History.
+
+    Precedents and the saved record are scoped to the caller's permitted clients."""
+    allowed = user["allowed_clients"]  # None = admin/unrestricted
+    canonical = clients.resolve(client) if client.strip() else None
+    # A scoped user may only tag (and later see) a generation for a client they can access.
+    if allowed is not None and (canonical is None or canonical not in allowed):
+        raise HTTPException(status_code=403, detail="client not in your permitted scope")
+    if item not in ITEM_TITLES:
+        raise HTTPException(status_code=400, detail=f"unsupported item {item}")
+
+    auth.log(user["username"], "generate_8k", f"item {item}: {file.filename or ''}")
+    tmpdir = Path(tempfile.mkdtemp(prefix="lawrag_gen_"))
+    dest = tmpdir / (file.filename or "upload")
+    try:
+        with open(dest, "wb") as f:
+            shutil.copyfileobj(file.file, f)
+        r = draft_8k(dest, item=item, allowed_clients=allowed)
+        gen_id = generations.save("8k_draft", r, source_name=file.filename,
+                                  client=canonical, item=item,
+                                  created_by=user["username"])
+        return {"id": gen_id, "result": r}
+    except NeedsOCR:
+        return JSONResponse({"error": "scanned",
+                             "detail": "This looks like a scanned PDF; OCR is not "
+                                       "enabled yet."}, status_code=422)
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse({"error": "failed", "detail": str(e)}, status_code=500)
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 class ExportReq(BaseModel):

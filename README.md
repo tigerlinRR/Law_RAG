@@ -94,10 +94,14 @@ A local web UI (`web/`, served by `lawrag/api.py`), gated by login. Views:
   Several files → a comparison table plus per-file reports. Export the whole batch
   to **Excel** (clause matrix + risks sheet) or **Word** (memo).
 - **Add to Library** — drag files in; type/parties/client/date auto-detected.
-- **History** — every AI-generated document (currently: experimental 8-K drafts
-  run via `scripts/draft_8k.py`), scoped by client. Click one to see the full
-  draft with its fact → source-quote trace and `⚠ UNVERIFIED` flags, and
-  download it as **Word** or **PDF** — not just on-screen text.
+- **Generate 8-K** — pick an Item type and a client, drop in the triggering
+  contract, and get a drafted Item disclosure (~1 min); it renders inline with
+  its fact→source trace and is saved to History. Precedents and the saved record
+  are scoped to the caller's clients.
+- **History** — every AI-generated document (experimental 8-K drafts), scoped by
+  client. Click one to see the full draft with its fact → source-quote trace and
+  `⚠ UNVERIFIED` flags, and download it as **Word** or **PDF** — not just
+  on-screen text. Timestamps are shown in the machine's local time.
 - **Users** (admin only) — create users, set role (lawyer/admin), grant/revoke
   client access with checkboxes, reset passwords, delete users.
 
