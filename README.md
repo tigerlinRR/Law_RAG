@@ -180,13 +180,19 @@ SEC disclosures are fact-critical, so this stays retrieval + extraction:
      QC at a glance. (The full framework is Item-1.01-specific today, matching
      counsel's guidance; other Items get the general checks until per-Item
      guidance is added.)
-4. **Export** mirrors an actual Form 8-K, not a generic report: SEC cover page
-   (registrant/EIN/address, checkboxes, securities table), the Item disclosure,
-   an Item 9.01 exhibit index, and a signature block, all stamped
-   `DRAFT — NOT FILED WITH THE SEC`. A clearly separate appendix (never mixed
-   into the filing text) holds the precedents used, the fact→source-quote trace,
-   and **the full set of terms extracted from the contract** — so a reviewer can
-   confirm the selective disclosure didn't drop anything material.
+4. **Export — two separate files, never combined:**
+   - The **8-K filing** (`draft_to_word` / `draft_to_pdf`): a clean document that
+     mirrors an actual Form 8-K — SEC cover page (registrant/EIN/address,
+     checkboxes, securities table), the Item disclosure, an Item 9.01 exhibit
+     index, and a signature block — nothing else, so it is ready for counsel to
+     finalize and file.
+   - The **review pack** (`review_to_word` / `review_to_pdf`): a *separate*
+     document for legal review only — the SEC-requirement checks, precedents
+     used, the fact→source-quote trace, and the full set of extracted contract
+     terms (to confirm the selective disclosure didn't drop anything material).
+   Web (History tab) and CLI (`--docx/--pdf` for the filing, `--review-docx/
+   --review-pdf` for the pack) expose both; the API serves the filing at
+   `/export/word|pdf` and the pack at `/export/review-word|review-pdf`.
 
 ```bash
 # Tag historical 8-Ks with their Item number(s) at ingest (auto-detected, or manual

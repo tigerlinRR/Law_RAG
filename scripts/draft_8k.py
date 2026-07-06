@@ -33,8 +33,12 @@ def main() -> None:
     ap.add_argument("--client", help="client to tag this draft with (for the History tab)")
     ap.add_argument("--json", action="store_true", help="print raw JSON instead of a report")
     ap.add_argument("--no-save", action="store_true", help="don't record this in generation history")
-    ap.add_argument("--docx", type=Path, help="also write the draft to this .docx path")
-    ap.add_argument("--pdf", type=Path, help="also write the draft to this .pdf path")
+    ap.add_argument("--docx", type=Path, help="write the clean 8-K filing to this .docx path")
+    ap.add_argument("--pdf", type=Path, help="write the clean 8-K filing to this .pdf path")
+    ap.add_argument("--review-docx", dest="review_docx", type=Path,
+                     help="write the SEPARATE review pack (for legal) to this .docx path")
+    ap.add_argument("--review-pdf", dest="review_pdf", type=Path,
+                     help="write the SEPARATE review pack (for legal) to this .pdf path")
     args = ap.parse_args()
 
     with console.status(f"Drafting Item {args.item} disclosure from {args.path.name} ..."):
@@ -46,13 +50,21 @@ def main() -> None:
                                    client=args.client, item=args.item)
         console.print(f"[dim]Saved to history as generation #{gen_id}[/]")
 
+    # The 8-K filing and the review pack are separate files — never combined.
     if args.docx:
         args.docx.write_bytes(export.draft_to_word(r))
-        console.print(f"[dim]Wrote {args.docx}[/]")
+        console.print(f"[dim]Wrote 8-K filing {args.docx}[/]")
     if args.pdf:
-        with console.status("Rendering PDF..."):
+        with console.status("Rendering filing PDF..."):
             args.pdf.write_bytes(export.draft_to_pdf(r))
-        console.print(f"[dim]Wrote {args.pdf}[/]")
+        console.print(f"[dim]Wrote 8-K filing {args.pdf}[/]")
+    if args.review_docx:
+        args.review_docx.write_bytes(export.review_to_word(r))
+        console.print(f"[dim]Wrote review pack {args.review_docx}[/]")
+    if args.review_pdf:
+        with console.status("Rendering review PDF..."):
+            args.review_pdf.write_bytes(export.review_to_pdf(r))
+        console.print(f"[dim]Wrote review pack {args.review_pdf}[/]")
 
     if args.json:
         print(json.dumps(r, ensure_ascii=False, indent=2))

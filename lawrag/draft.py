@@ -113,6 +113,33 @@ def _ensure_exhibit_qualifier(disclosure: str) -> str:
     )
     return disclosure.rstrip() + "\n\n" + qualifier
 
+
+def _ensure_material_relationship(disclosure: str) -> str:
+    """Item 1.01(c) requires a statement of any material relationship between the
+    registrant and a party OTHER THAN the agreement. The model usually writes it
+    but drops it when the precedents don't model it, so guarantee it in standard
+    form. It cannot be verified from the contract, so counsel must confirm it —
+    but omitting the required (c) element entirely is worse than including the
+    standard negative statement for review."""
+    if "material relationship" in disclosure.lower():
+        return disclosure
+    terms = re.findall(r'\(the [“”"]([A-Z][A-Za-z ]+?)[“”"]\)', disclosure)
+    instrument = next((t for t in terms if t.strip().lower() not in _PARTY_TERMS), None) \
+        or (terms[0] if terms else "Agreement")
+    counterparty = next(
+        (t for t in terms if t.strip().lower() in _PARTY_TERMS
+         and t.strip().lower() not in {"company", "registrant", "party", "parties"}),
+        None)
+    cp = f"the {counterparty}" if counterparty else "the counterparty"
+    stmt = (f"Other than in respect of the {instrument}, there is no material "
+            f"relationship between the Company and {cp}.")
+    # Insert before the closing "qualified in its entirety" sentence if present.
+    low = disclosure.lower()
+    idx = low.find("the foregoing description")
+    if idx != -1:
+        return disclosure[:idx].rstrip() + "\n\n" + stmt + "\n\n" + disclosure[idx:]
+    return disclosure.rstrip() + "\n\n" + stmt
+
 DRAFT_SCHEMA = {
     "type": "object",
     "properties": {
@@ -206,7 +233,15 @@ ITEM_RULES: dict[str, str] = {
         "amount and nature of consideration (or the formula / exchange ratio); "
         "committed financing (e.g. a PIPE) and its material terms; post-closing "
         "ownership or management structure; material closing conditions; and the "
-        "anticipated timeframes for related filings and for closing."
+        "anticipated timeframes for related filings and for closing.\n"
+        "ALSO, for the type of agreement at hand: (i) for an asset purchase or "
+        "disposition, state the QUANTITATIVE characteristics of the asset (e.g. square "
+        "footage, unit count, quantity) and its location, plus the closing / "
+        "consummation timing and any material closing conditions; (ii) close the "
+        "material-terms description with a brief statement that the agreement contains "
+        "representations, warranties, covenants, and indemnification provisions that "
+        "are customary for transactions of this type (rather than omitting them "
+        "silently) — this is how real filings account for the remaining terms."
     ),
 }
 
@@ -297,7 +332,10 @@ def draft_8k(
     # rather than trust free-form generation (which sometimes echoes precedent text).
     result["item"] = item
     result["item_title"] = item_title
-    result["disclosure"] = _ensure_exhibit_qualifier(result.get("disclosure", ""))
+    disc = result.get("disclosure", "")
+    if item == "1.01":
+        disc = _ensure_material_relationship(disc)
+    result["disclosure"] = _ensure_exhibit_qualifier(disc)
     result["_compliance"] = _compliance_flags(item, result["disclosure"])
     full_text = review.get("_full_text", "")
     for f in result.get("facts_used", []):

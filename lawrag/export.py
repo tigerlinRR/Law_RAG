@@ -288,29 +288,42 @@ def draft_to_word(draft: dict) -> bytes:
     p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
     doc.add_paragraph(f"Dated: {date}")
 
-    doc.add_page_break()
-    doc.add_heading("Review materials (not part of the filing)", level=1)
+    # NOTE: the filing document ends here — no review/QC material is mixed in, so
+    # this file is the clean 8-K ready for counsel to finalize. The review pack
+    # (precedents, fact trace, SEC checks, full extraction) is a SEPARATE document,
+    # produced by review_to_word() / review_to_pdf().
+    buf = io.BytesIO()
+    doc.save(buf)
+    return buf.getvalue()
+
+
+def review_to_word(draft: dict) -> bytes:
+    """The review pack — a SEPARATE document (never mixed into the filing) that
+    lets counsel check the draft: SEC-requirement checks, precedents used, the
+    fact -> source-quote trace, and the full set of extracted contract terms."""
+    doc = docx.Document()
+    doc.add_heading(f"8-K Draft — Review Materials (Item {draft.get('item', '')})", 0)
     doc.add_paragraph(
-        f"Source contract: {draft.get('_source_contract', '—')} — experimental "
-        "AI-drafted disclosure; verify every fact below against the source contract "
-        "before relying on any of it.")
+        f"Companion to the drafted 8-K for source contract "
+        f"{draft.get('_source_contract', '—')}. NOT part of the filing — for "
+        "internal review only. Verify every fact below against the source contract.")
 
     compliance = draft.get("_compliance") or []
     if compliance:
-        doc.add_heading("SEC requirement checks", level=2)
+        doc.add_heading("SEC requirement checks", level=1)
         for c in compliance:
             mark = "✓" if c.get("satisfied") else "✗ MISSING"
             doc.add_paragraph(f"{mark}  {c.get('requirement', '')}", style="List Bullet")
 
     precedents = draft.get("_precedents_used") or []
     if precedents:
-        doc.add_heading("Precedents used (style reference only)", level=2)
+        doc.add_heading("Precedents used (style reference only)", level=1)
         for p in precedents:
             doc.add_paragraph(p, style="List Bullet")
 
     facts = draft.get("facts_used") or []
     if facts:
-        doc.add_heading("Fact -> source trace", level=2)
+        doc.add_heading("Fact -> source trace", level=1)
         table = doc.add_table(rows=1, cols=3)
         table.style = "Table Grid"
         fhdr = table.rows[0].cells
@@ -323,11 +336,11 @@ def draft_to_word(draft: dict) -> bytes:
 
     all_terms = draft.get("_all_extracted_terms") or []
     if all_terms:
-        doc.add_heading("All terms extracted from the contract", level=2)
+        doc.add_heading("All terms extracted from the contract", level=1)
         doc.add_paragraph(
-            "The disclosure above states only the material terms, following 8-K "
-            "convention. This is the full set the review engine extracted — use it to "
-            "confirm nothing material was left out of the disclosure.")
+            "The disclosure states only the material terms, following 8-K convention. "
+            "This is the full set the review engine extracted — use it to confirm "
+            "nothing material was left out of the disclosure.")
         table = doc.add_table(rows=1, cols=2)
         table.style = "Table Grid"
         thdr = table.rows[0].cells
@@ -342,30 +355,18 @@ def draft_to_word(draft: dict) -> bytes:
     return buf.getvalue()
 
 
-def _draft_html(draft: dict) -> str:
-    def esc(s: str) -> str:
-        return (s or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+def _esc(s: str) -> str:
+    return (s or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
+
+def _draft_html(draft: dict) -> str:
+    """The clean filing document — cover page, Item disclosure, Item 9.01, and
+    signature. NO review/QC material (that lives in _review_html)."""
+    esc = _esc
     r = REGISTRANT
     date = _report_date(draft)
 
-    facts_rows = "".join(
-        f"<tr{' class=\"unverified\"' if not f.get('verified') else ''}>"
-        f"<td>{esc(f.get('fact',''))}</td><td>{esc(f.get('source_quote',''))}</td>"
-        f"<td>{'Yes' if f.get('verified') else '⚠ UNVERIFIED'}</td></tr>"
-        for f in draft.get("facts_used") or []
-    )
-    precedents = "".join(f"<li>{esc(p)}</li>" for p in draft.get("_precedents_used") or [])
     disclosure_html = "".join(f"<p>{esc(para)}</p>" for para in _disclosure_paragraphs(draft))
-    all_terms_rows = "".join(
-        f"<tr><td>{esc(t.get('name',''))}</td><td>{esc(t.get('value',''))}</td></tr>"
-        for t in draft.get("_all_extracted_terms") or []
-    )
-    compliance_rows = "".join(
-        f"<tr><td>{'✓' if c.get('satisfied') else '✗ MISSING'}</td>"
-        f"<td>{esc(c.get('requirement',''))}</td></tr>"
-        for c in draft.get("_compliance") or []
-    )
     sec_rows = "".join(
         f"<tr><td>{esc(cls)}</td><td style='text-align:center'>{esc(sym)}</td>"
         f"<td style='text-align:center'>{esc(exch)}</td></tr>"
@@ -478,25 +479,55 @@ def _draft_html(draft: dict) -> str:
         </div>
         <p style="margin-top:20px;">Dated: {esc(date)}</p>
       </div>
-
-      <div class="pagebreak">
-        <h2 style="font-size:16px;">Review materials (not part of the filing)</h2>
-        <p class="appendix-note">Source contract: {esc(draft.get('_source_contract','—'))} &mdash; experimental
-        AI-drafted disclosure; verify every fact below against the source contract before relying on any of it.</p>
-        {"<h2>SEC requirement checks</h2><table class='review'><thead><tr><th>Status</th><th>Requirement</th></tr></thead><tbody>" + compliance_rows + "</tbody></table>" if compliance_rows else ""}
-        {"<h2>Precedents used (style reference only)</h2><ul>" + precedents + "</ul>" if precedents else ""}
-        {"<h2>Fact -&gt; source trace</h2><table class='review'><thead><tr><th>Fact</th><th>Source quote</th><th>Verified</th></tr></thead><tbody>" + facts_rows + "</tbody></table>" if facts_rows else ""}
-        {"<h2>All terms extracted from the contract</h2><p class='appendix-note'>The disclosure states only the material terms, per 8-K convention. This is the full set the review engine extracted &mdash; use it to confirm nothing material was left out.</p><table class='review'><thead><tr><th>Term</th><th>Value</th></tr></thead><tbody>" + all_terms_rows + "</tbody></table>" if all_terms_rows else ""}
-      </div>
     </body></html>"""
 
 
-def draft_to_pdf(draft: dict) -> bytes:
-    """Renders the draft to PDF via a local, offscreen Chromium (Playwright) —
-    no network access, same engine already used to convert reference filings."""
+def _review_html(draft: dict) -> str:
+    """The review pack as a SEPARATE document — SEC checks, precedents, fact
+    trace, full extraction. Never mixed into the filing."""
+    esc = _esc
+    facts_rows = "".join(
+        f"<tr{' class=\"unverified\"' if not f.get('verified') else ''}>"
+        f"<td>{esc(f.get('fact',''))}</td><td>{esc(f.get('source_quote',''))}</td>"
+        f"<td>{'Yes' if f.get('verified') else '⚠ UNVERIFIED'}</td></tr>"
+        for f in draft.get("facts_used") or []
+    )
+    precedents = "".join(f"<li>{esc(p)}</li>" for p in draft.get("_precedents_used") or [])
+    all_terms_rows = "".join(
+        f"<tr><td>{esc(t.get('name',''))}</td><td>{esc(t.get('value',''))}</td></tr>"
+        for t in draft.get("_all_extracted_terms") or []
+    )
+    compliance_rows = "".join(
+        f"<tr><td>{'✓' if c.get('satisfied') else '✗ MISSING'}</td>"
+        f"<td>{esc(c.get('requirement',''))}</td></tr>"
+        for c in draft.get("_compliance") or []
+    )
+    return f"""<!doctype html><html><head><meta charset="utf-8"><style>
+      body {{ font-family: 'Times New Roman', Georgia, serif; color: #000; padding: 50px 60px;
+              font-size: 13px; line-height: 1.45; }}
+      h1 {{ font-size: 18px; }} h2 {{ font-size: 14px; margin-top: 22px; }}
+      table {{ border-collapse: collapse; width: 100%; margin-top: 8px; font-size: 12px; }}
+      td, th {{ border: 1px solid #999; padding: 5px 8px; text-align: left; vertical-align: top; }}
+      th {{ background: #1a2238; color: #fff; }}
+      tr.unverified td {{ color: #b4232a; font-weight: 600; }}
+      .note {{ color: #555; font-size: 12px; }}
+    </style></head><body>
+      <h1>8-K Draft — Review Materials (Item {esc(draft.get('item',''))})</h1>
+      <p class="note">Companion to the drafted 8-K for source contract
+      {esc(draft.get('_source_contract','—'))}. NOT part of the filing — for internal
+      review only. Verify every fact below against the source contract.</p>
+      {"<h2>SEC requirement checks</h2><table><thead><tr><th>Status</th><th>Requirement</th></tr></thead><tbody>" + compliance_rows + "</tbody></table>" if compliance_rows else ""}
+      {"<h2>Precedents used (style reference only)</h2><ul>" + precedents + "</ul>" if precedents else ""}
+      {"<h2>Fact -&gt; source trace</h2><table><thead><tr><th>Fact</th><th>Source quote</th><th>Verified</th></tr></thead><tbody>" + facts_rows + "</tbody></table>" if facts_rows else ""}
+      {"<h2>All terms extracted from the contract</h2><p class='note'>The disclosure states only the material terms, per 8-K convention. This is the full set the review engine extracted &mdash; use it to confirm nothing material was left out.</p><table><thead><tr><th>Term</th><th>Value</th></tr></thead><tbody>" + all_terms_rows + "</tbody></table>" if all_terms_rows else ""}
+    </body></html>"""
+
+
+def _render_pdf(html: str) -> bytes:
+    """Render HTML to PDF via a local, offscreen Chromium (Playwright) — no
+    network access, same engine used to convert reference filings."""
     from playwright.sync_api import sync_playwright
 
-    html = _draft_html(draft)
     with sync_playwright() as p:
         browser = p.chromium.launch()
         page = browser.new_page()
@@ -505,3 +536,13 @@ def draft_to_pdf(draft: dict) -> bytes:
                                                         "left": "0.6in", "right": "0.6in"})
         browser.close()
     return pdf_bytes
+
+
+def draft_to_pdf(draft: dict) -> bytes:
+    """The clean filing PDF (no review material)."""
+    return _render_pdf(_draft_html(draft))
+
+
+def review_to_pdf(draft: dict) -> bytes:
+    """The review-pack PDF (separate from the filing)."""
+    return _render_pdf(_review_html(draft))

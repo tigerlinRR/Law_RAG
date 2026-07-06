@@ -321,6 +321,8 @@ def _get_generation_or_404(gen_id: int, user: dict) -> dict:
     return g
 
 
+# The 8-K filing itself (clean, ready to finalize) and the review pack (separate,
+# for counsel) are DISTINCT downloads — never combined in one file.
 @app.get("/api/generations/{gen_id}/export/word")
 def export_generation_word(gen_id: int, user: dict = Depends(current_user)) -> StreamingResponse:
     g = _get_generation_or_404(gen_id, user)
@@ -335,6 +337,22 @@ def export_generation_pdf(gen_id: int, user: dict = Depends(current_user)) -> St
     data = export.draft_to_pdf(g["result"])
     return StreamingResponse(io.BytesIO(data), media_type="application/pdf", headers={
         "Content-Disposition": f'attachment; filename="8k-draft-{gen_id}.pdf"'})
+
+
+@app.get("/api/generations/{gen_id}/export/review-word")
+def export_review_word(gen_id: int, user: dict = Depends(current_user)) -> StreamingResponse:
+    g = _get_generation_or_404(gen_id, user)
+    data = export.review_to_word(g["result"])
+    return StreamingResponse(io.BytesIO(data), media_type=_DOCX, headers={
+        "Content-Disposition": f'attachment; filename="8k-draft-{gen_id}-review.docx"'})
+
+
+@app.get("/api/generations/{gen_id}/export/review-pdf")
+def export_review_pdf(gen_id: int, user: dict = Depends(current_user)) -> StreamingResponse:
+    g = _get_generation_or_404(gen_id, user)
+    data = export.review_to_pdf(g["result"])
+    return StreamingResponse(io.BytesIO(data), media_type="application/pdf", headers={
+        "Content-Disposition": f'attachment; filename="8k-draft-{gen_id}-review.pdf"'})
 
 
 # ---------- user management (admin only) ----------

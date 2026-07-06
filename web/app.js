@@ -570,15 +570,21 @@ function renderDraftInto(r, report, meta) {
   report.appendChild(src);
 
   if (meta && meta.id != null) {
-    const bar = el("div", "exportbar");
-    bar.appendChild(el("span", "exp-label", "Download:"));
-    const doc = el("a", "btn-ghost", "Word (.docx)");
-    doc.href = `/api/generations/${meta.id}/export/word`;
-    const pdf = el("a", "btn-ghost", "PDF");
-    pdf.href = `/api/generations/${meta.id}/export/pdf`;
-    bar.appendChild(doc);
-    bar.appendChild(pdf);
-    report.appendChild(bar);
+    const mk = (label, path) => {
+      const a = el("a", "btn-ghost", label);
+      a.href = `/api/generations/${meta.id}/export/${path}`;
+      return a;
+    };
+    const bar1 = el("div", "exportbar");
+    bar1.appendChild(el("span", "exp-label", "8-K filing (clean, ready to finalize):"));
+    bar1.appendChild(mk("Word (.docx)", "word"));
+    bar1.appendChild(mk("PDF", "pdf"));
+    report.appendChild(bar1);
+    const bar2 = el("div", "exportbar");
+    bar2.appendChild(el("span", "exp-label", "Review pack (separate — for legal):"));
+    bar2.appendChild(mk("Word (.docx)", "review-word"));
+    bar2.appendChild(mk("PDF", "review-pdf"));
+    report.appendChild(bar2);
   }
 
   const p = el("div", "panel");
