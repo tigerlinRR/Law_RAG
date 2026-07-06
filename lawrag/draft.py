@@ -142,10 +142,11 @@ _SYSTEM = (
     "the transaction and only its most material commercial or economic terms, then "
     "defer everything else to the full agreement filed as an exhibit.\n\n"
     "You are given (a) facts extracted from the source contract, each with a verbatim "
-    "quote, and (b) prior 8-K filings of the SAME Item type. The precedents are your "
-    "model for HOW MUCH to include and WHICH KINDS of terms are material for this Item "
-    "type — match their length and selectivity, not just their tone. If the precedents "
-    "disclose only a handful of terms, you must be equally selective.\n\n"
+    "quote, (b) prior 8-K filings of the SAME Item type, and (c) the mandatory SEC "
+    "disclosure requirements for this Item. The precedents are your model for HOW MUCH "
+    "to include and WHICH KINDS of terms are material — match their length and "
+    "selectivity, not just their tone. Your draft MUST satisfy every mandatory SEC "
+    "requirement in (c).\n\n"
     "RULES:\n"
     "1. Include only the material terms a reasonable investor needs: the nature of the "
     "transaction, the parties, the date, and the key commercial/economic terms the "
@@ -173,8 +174,41 @@ _SYSTEM = (
     "'Interest Rate'), and 'source_quote' MUST be copied character-for-character from "
     "one of the listed clause quotes (never from the contract-summary sentence, which "
     "is paraphrased context). Cite only the facts you actually disclose — fewer, "
-    "material facts is correct, not a shortcoming."
+    "material facts is correct, not a shortcoming.\n"
+    "7. TONE: neutral and factual, written for the general investing public. Do NOT "
+    "use promotional or puffery language (no 'exciting', 'leading', 'transformative', "
+    "etc.). State the facts plainly."
 )
+
+# Mandatory SEC disclosure requirements per Item, from Richtech counsel's guidance
+# (Form 8-K rules + the materiality standard from TSC Industries / Basic v. Levinson).
+# Injected into the prompt so the draft is built to satisfy them, and checked after.
+ITEM_RULES: dict[str, str] = {
+    "1.01": (
+        "SEC Item 1.01 (Entry into a Material Definitive Agreement) — the disclosure "
+        "MUST state ALL of:\n"
+        "(a) the DATE the agreement was entered into (or amended);\n"
+        "(b) the IDENTITY OF THE PARTIES;\n"
+        "(c) a brief description of any MATERIAL RELATIONSHIP between the registrant "
+        "or its affiliates and any party, OTHER THAN in respect of this agreement. "
+        "The contract usually will not state this; include the standard statement "
+        "(e.g. 'Other than in respect of the Agreement, there is no material "
+        "relationship between the Company and [counterparty].') — it cannot be "
+        "verified from the contract, so counsel must confirm it;\n"
+        "(d) a brief description of the terms and conditions that are MATERIAL to the "
+        "registrant.\n"
+        "MATERIALITY TEST for (d): a term is material if there is a substantial "
+        "likelihood a reasonable shareholder would consider it important — i.e. its "
+        "disclosure would significantly alter the 'total mix' of information. When a "
+        "term is arguably material, INCLUDE it — omitting a material term is the "
+        "greater risk; defer only genuine boilerplate to the exhibit. For financing / "
+        "business-combination agreements, treat these as presumptively material: the "
+        "amount and nature of consideration (or the formula / exchange ratio); "
+        "committed financing (e.g. a PIPE) and its material terms; post-closing "
+        "ownership or management structure; material closing conditions; and the "
+        "anticipated timeframes for related filings and for closing."
+    ),
+}
 
 
 def _facts_block(review: dict) -> str:
@@ -192,12 +226,36 @@ def _user_prompt(item: str, item_title: str, review: dict, precedents: list[str]
     precedents_block = "\n\n---\n\n".join(precedents) if precedents else \
         "(no prior filing of this Item type found in the library — draft from the " \
         "contract facts alone, using standard 8-K disclosure conventions)"
+    rules = ITEM_RULES.get(item, "(no item-specific requirements on file — apply "
+                           "standard 8-K disclosure conventions)")
     return (
         f"=== TARGET: Item {item} — {item_title} ===\n\n"
+        f"=== MANDATORY SEC DISCLOSURE REQUIREMENTS (your draft MUST satisfy all) ===\n"
+        f"{rules}\n\n"
         f"=== FACTS EXTRACTED FROM THE SOURCE CONTRACT ===\n{_facts_block(review)}\n\n"
         f"=== PRIOR ITEM {item} FILINGS (structure/style reference ONLY — do not "
         f"reuse their facts) ===\n{precedents_block}"
     )
+
+
+def _compliance_flags(item: str, disclosure: str) -> list[dict]:
+    """Lightweight post-check that the drafted disclosure visibly covers the
+    mandatory Item requirements, so a reviewer sees a compliance summary rather
+    than having to re-derive it. Presence checks only — not a legal judgment."""
+    d = disclosure.lower()
+    checks: list[tuple[str, bool]] = []
+    if item == "1.01":
+        has_date = bool(re.search(r"\b[A-Z][a-z]+ \d{1,2}, \d{4}\b", disclosure))
+        checks = [
+            ("(a) date of agreement", has_date),
+            ("(b) parties identified", " between " in d or " with " in d),
+            ("(c) material-relationship statement", "material relationship" in d),
+            ("(d) material terms described", len(disclosure.split()) > 40),
+            ("exhibit incorporation-by-reference", "qualified in its entirety" in d),
+        ]
+    else:
+        checks = [("exhibit incorporation-by-reference", "qualified in its entirety" in d)]
+    return [{"requirement": name, "satisfied": ok} for name, ok in checks]
 
 
 def draft_8k(
@@ -240,6 +298,7 @@ def draft_8k(
     result["item"] = item
     result["item_title"] = item_title
     result["disclosure"] = _ensure_exhibit_qualifier(result.get("disclosure", ""))
+    result["_compliance"] = _compliance_flags(item, result["disclosure"])
     full_text = review.get("_full_text", "")
     for f in result.get("facts_used", []):
         f["verified"] = verify_quote(f.get("source_quote", ""), full_text)

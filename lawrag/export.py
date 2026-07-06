@@ -295,6 +295,13 @@ def draft_to_word(draft: dict) -> bytes:
         "AI-drafted disclosure; verify every fact below against the source contract "
         "before relying on any of it.")
 
+    compliance = draft.get("_compliance") or []
+    if compliance:
+        doc.add_heading("SEC requirement checks", level=2)
+        for c in compliance:
+            mark = "✓" if c.get("satisfied") else "✗ MISSING"
+            doc.add_paragraph(f"{mark}  {c.get('requirement', '')}", style="List Bullet")
+
     precedents = draft.get("_precedents_used") or []
     if precedents:
         doc.add_heading("Precedents used (style reference only)", level=2)
@@ -353,6 +360,11 @@ def _draft_html(draft: dict) -> str:
     all_terms_rows = "".join(
         f"<tr><td>{esc(t.get('name',''))}</td><td>{esc(t.get('value',''))}</td></tr>"
         for t in draft.get("_all_extracted_terms") or []
+    )
+    compliance_rows = "".join(
+        f"<tr><td>{'✓' if c.get('satisfied') else '✗ MISSING'}</td>"
+        f"<td>{esc(c.get('requirement',''))}</td></tr>"
+        for c in draft.get("_compliance") or []
     )
     sec_rows = "".join(
         f"<tr><td>{esc(cls)}</td><td style='text-align:center'>{esc(sym)}</td>"
@@ -471,6 +483,7 @@ def _draft_html(draft: dict) -> str:
         <h2 style="font-size:16px;">Review materials (not part of the filing)</h2>
         <p class="appendix-note">Source contract: {esc(draft.get('_source_contract','—'))} &mdash; experimental
         AI-drafted disclosure; verify every fact below against the source contract before relying on any of it.</p>
+        {"<h2>SEC requirement checks</h2><table class='review'><thead><tr><th>Status</th><th>Requirement</th></tr></thead><tbody>" + compliance_rows + "</tbody></table>" if compliance_rows else ""}
         {"<h2>Precedents used (style reference only)</h2><ul>" + precedents + "</ul>" if precedents else ""}
         {"<h2>Fact -&gt; source trace</h2><table class='review'><thead><tr><th>Fact</th><th>Source quote</th><th>Verified</th></tr></thead><tbody>" + facts_rows + "</tbody></table>" if facts_rows else ""}
         {"<h2>All terms extracted from the contract</h2><p class='appendix-note'>The disclosure states only the material terms, per 8-K convention. This is the full set the review engine extracted &mdash; use it to confirm nothing material was left out.</p><table class='review'><thead><tr><th>Term</th><th>Value</th></tr></thead><tbody>" + all_terms_rows + "</tbody></table>" if all_terms_rows else ""}

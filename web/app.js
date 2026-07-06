@@ -586,6 +586,18 @@ function renderDraftInto(r, report, meta) {
   p.appendChild(el("div", "summary", r.disclosure || ""));
   report.appendChild(p);
 
+  if (r._compliance && r._compliance.length) {
+    const cp = el("div", "panel");
+    cp.appendChild(el("h3", null, "SEC requirement checks"));
+    r._compliance.forEach((c) => {
+      const row = el("div", "risk-item");
+      row.appendChild(el("span", c.satisfied ? "" : "flag", c.satisfied ? "✓ " : "✗ "));
+      row.appendChild(el("span", null, c.requirement));
+      cp.appendChild(row);
+    });
+    report.appendChild(cp);
+  }
+
   if (r._precedents_used && r._precedents_used.length) {
     const pp = el("div", "panel");
     pp.appendChild(el("h3", null, "Precedents used (style reference only)"));

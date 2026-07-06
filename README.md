@@ -166,6 +166,20 @@ SEC disclosures are fact-critical, so this stays retrieval + extraction:
    due-diligence engine's clause quotes) is checked programmatically against the
    source text (`summarize.verify_quote`) — a citation not found verbatim is
    flagged `⚠ UNVERIFIED` rather than silently trusted.
+   - **Regulatory framework baked in (from Richtech counsel).** Each Item's
+     mandatory SEC requirements are injected into the prompt via `ITEM_RULES`.
+     For **Item 1.01** this encodes the must-disclose set — (a) date, (b)
+     parties, (c) a material-relationship statement (auto-included in standard
+     form, flagged for counsel since it can't be derived from the contract), (d)
+     material terms — plus the **materiality standard** (the reasonable-
+     shareholder / "total mix" test, erring toward *including* an arguably
+     material term since omission is the greater risk) and a **neutral,
+     no-puffery tone** requirement. Every draft carries a `_compliance` summary
+     (a checklist of those requirements marked satisfied / missing) shown in the
+     web view and in the exported appendix, so a reviewer sees the SEC-requirement
+     QC at a glance. (The full framework is Item-1.01-specific today, matching
+     counsel's guidance; other Items get the general checks until per-Item
+     guidance is added.)
 4. **Export** mirrors an actual Form 8-K, not a generic report: SEC cover page
    (registrant/EIN/address, checkboxes, securities table), the Item disclosure,
    an Item 9.01 exhibit index, and a signature block, all stamped
