@@ -160,40 +160,45 @@ def _disclosure_paragraphs(draft: dict) -> list[str]:
 
 
 def draft_to_word(draft: dict) -> bytes:
+    from docx.shared import Inches, Pt
     r = REGISTRANT
     date = _report_date(draft)
     doc = docx.Document()
 
-    def centered(text: str, bold=False, size=None):
+    # Compact spacing + modest margins so the whole cover page fits on ONE page,
+    # like a real filing (spacers pushed it onto a second page otherwise).
+    normal = doc.styles["Normal"]
+    normal.font.size = Pt(10)
+    normal.paragraph_format.space_after = Pt(2)
+    normal.paragraph_format.space_before = Pt(0)
+    normal.paragraph_format.line_spacing = 1.0
+    for s in doc.sections:
+        s.top_margin = s.bottom_margin = Inches(0.5)
+        s.left_margin = s.right_margin = Inches(0.85)
+
+    def centered(text: str, bold=False, size=None, gap_before=0):
         p = doc.add_paragraph()
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        if gap_before:
+            p.paragraph_format.space_before = Pt(gap_before)
         run = p.add_run(text)
         run.bold = bold
         if size:
-            run.font.size = docx.shared.Pt(size)
+            run.font.size = Pt(size)
         return p
 
-    warn = doc.add_paragraph()
-    warn.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    wr = warn.add_run("DRAFT — FOR INTERNAL REVIEW ONLY — NOT FILED WITH THE SEC")
-    wr.bold = True
-    doc.add_paragraph()
+    centered("DRAFT — FOR INTERNAL REVIEW ONLY — NOT FILED WITH THE SEC", bold=True)
 
-    centered("UNITED STATES", bold=True)
+    centered("UNITED STATES", bold=True, gap_before=6)
     centered("SECURITIES AND EXCHANGE COMMISSION", bold=True)
     centered("Washington, D.C. 20549", bold=True)
-    doc.add_paragraph()
-    centered("FORM 8-K", bold=True, size=14)
-    doc.add_paragraph()
-    centered("CURRENT REPORT", bold=True)
+    centered("FORM 8-K", bold=True, size=14, gap_before=7)
+    centered("CURRENT REPORT", bold=True, gap_before=7)
     centered("Pursuant to Section 13 or 15(d) of the", bold=True)
     centered("Securities Exchange Act of 1934", bold=True)
-    doc.add_paragraph()
-    centered(f"Date of Report (Date of earliest event reported): {date}")
-    doc.add_paragraph()
-    centered(r["name"], bold=True)
+    centered(f"Date of Report (Date of earliest event reported): {date}", gap_before=7)
+    centered(r["name"], bold=True, gap_before=7)
     centered("(Exact name of registrant as specified in its charter)")
-    doc.add_paragraph()
 
     t = doc.add_table(rows=2, cols=3)
     t.style = "Table Grid"
@@ -203,31 +208,27 @@ def draft_to_word(draft: dict) -> bytes:
     for i, v in enumerate(["(State or other jurisdiction of incorporation)",
                             "(Commission File Number)", "(IRS Employer Identification No.)"]):
         p = t.rows[1].cells[i].paragraphs[0]
-        p.add_run(v).font.size = docx.shared.Pt(9)
+        p.add_run(v).font.size = Pt(9)
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    doc.add_paragraph()
 
-    for line in r["address"]:
-        centered(line, bold=True)
+    for j, line in enumerate(r["address"]):
+        centered(line, bold=True, gap_before=6 if j == 0 else 0)
     centered("(Address of principal executive offices, including zip code)")
-    doc.add_paragraph()
-    centered(f"Registrant's telephone number, including area code: {r['phone']}")
-    doc.add_paragraph()
-    centered("Not Applicable")
+    centered(f"Registrant's telephone number, including area code: {r['phone']}", gap_before=5)
+    centered("Not Applicable", bold=True, gap_before=5)
     centered("(Former name or former address, if changed since last report)")
-    doc.add_paragraph()
 
-    doc.add_paragraph(
+    intro = doc.add_paragraph(
         "Check the appropriate box below if the Form 8-K filing is intended to "
         "simultaneously satisfy the filing obligation of the registrant under any of "
         "the following provisions:")
+    intro.paragraph_format.space_before = Pt(6)
     doc.add_paragraph("☐  Written communications pursuant to Rule 425 under the Securities Act (17 CFR 230.425)")
     doc.add_paragraph("☐  Soliciting material pursuant to Rule 14a-12 under the Exchange Act (17 CFR 240.14a-12)")
     doc.add_paragraph("☐  Pre-commencement communications pursuant to Rule 14d-2(b) under the Exchange Act (17 CFR 240.14d-2(b))")
     doc.add_paragraph("☐  Pre-commencement communications pursuant to Rule 13e-4(c) under the Exchange Act (17 CFR 240.13e-4(c))")
-    doc.add_paragraph()
 
-    centered("Securities registered pursuant to Section 12(b) of the Act:")
+    centered("Securities registered pursuant to Section 12(b) of the Act:", gap_before=5)
     t2 = doc.add_table(rows=1 + len(r["securities"]), cols=3)
     t2.style = "Table Grid"
     for i, h in enumerate(["Title of each class", "Trading Symbol(s)", "Name of each exchange on which registered"]):
@@ -236,13 +237,13 @@ def draft_to_word(draft: dict) -> bytes:
         vals = (cls, sym, exch)
         for i, v in enumerate(vals):
             t2.rows[row_i].cells[i].text = v
-    doc.add_paragraph()
 
     egc = "☒" if r["emerging_growth_company"] else "☐"
-    doc.add_paragraph(
+    egp = doc.add_paragraph(
         "Indicate by check mark whether the registrant is an emerging growth company as "
         "defined in Rule 405 of the Securities Act of 1933 (§230.405 of this chapter) or "
         "Rule 12b-2 of the Securities Exchange Act of 1934 (§240.12b-2 of this chapter).")
+    egp.paragraph_format.space_before = Pt(6)
     doc.add_paragraph(f"Emerging growth company {egc}")
     doc.add_paragraph(
         "If an emerging growth company, indicate by check mark if the registrant has "
@@ -375,16 +376,16 @@ def _draft_html(draft: dict) -> str:
     egc = "&#9746;" if r["emerging_growth_company"] else "&#9744;"  # ☒ / ☐
 
     return f"""<!doctype html><html><head><meta charset="utf-8"><style>
-      body {{ font-family: 'Times New Roman', Georgia, serif; color: #000; padding: 50px 60px;
-              font-size: 13px; line-height: 1.45; }}
-      .draft-banner {{ text-align: center; font-weight: 700; font-size: 13px; margin-bottom: 24px; }}
+      body {{ font-family: 'Times New Roman', Georgia, serif; color: #000; padding: 12px 30px;
+              font-size: 11.5px; line-height: 1.3; }}
+      .draft-banner {{ text-align: center; font-weight: 700; font-size: 12px; margin-bottom: 12px; }}
       .center {{ text-align: center; }}
       .bold {{ font-weight: 700; }}
-      .small {{ font-size: 11px; }}
-      .cover p {{ margin: 4px 0; }}
-      .cover table {{ width: 100%; border-collapse: collapse; margin: 10px 0; }}
-      .cover table td {{ text-align: center; padding: 4px; vertical-align: top; }}
-      hr {{ border: none; border-top: 2px solid #000; margin: 6px 0 18px; }}
+      .small {{ font-size: 10.5px; }}
+      .cover p {{ margin: 2px 0; }}
+      .cover table {{ width: 100%; border-collapse: collapse; margin: 8px 0; }}
+      .cover table td {{ text-align: center; padding: 3px; vertical-align: top; }}
+      hr {{ border: none; border-top: 2px solid #000; margin: 4px 0 10px; }}
       .pagebreak {{ page-break-before: always; }}
       .filing p {{ text-indent: 0.4in; margin: 0 0 12px; }}
       .filing h2 {{ font-size: 13px; margin: 22px 0 4px; }}
@@ -404,11 +405,11 @@ def _draft_html(draft: dict) -> str:
         <p class="bold">UNITED STATES</p>
         <p class="bold">SECURITIES AND EXCHANGE COMMISSION</p>
         <p class="bold">Washington, D.C. 20549</p>
-        <p class="bold" style="font-size:16px; margin-top:20px;">FORM 8-K</p>
-        <p class="bold" style="margin-top:20px;">CURRENT REPORT</p>
+        <p class="bold" style="font-size:15px; margin-top:12px;">FORM 8-K</p>
+        <p class="bold" style="margin-top:10px;">CURRENT REPORT</p>
         <p class="bold">Pursuant to Section 13 or 15(d) of the<br>Securities Exchange Act of 1934</p>
-        <p style="margin-top:16px;">Date of Report (Date of earliest event reported): {esc(date)}</p>
-        <p class="bold" style="margin-top:16px;">{esc(r['name'])}</p>
+        <p style="margin-top:10px;">Date of Report (Date of earliest event reported): {esc(date)}</p>
+        <p class="bold" style="margin-top:10px;">{esc(r['name'])}</p>
         <p class="small">(Exact name of registrant as specified in its charter)</p>
         <table>
           <tr>
@@ -424,12 +425,12 @@ def _draft_html(draft: dict) -> str:
         </table>
         <p class="bold">{"<br>".join(esc(l) for l in r['address'])}</p>
         <p class="small">(Address of principal executive offices, including zip code)</p>
-        <p style="margin-top:12px;">Registrant's telephone number, including area code: {esc(r['phone'])}</p>
-        <p class="bold" style="margin-top:12px;">Not Applicable</p>
+        <p style="margin-top:8px;">Registrant's telephone number, including area code: {esc(r['phone'])}</p>
+        <p class="bold" style="margin-top:8px;">Not Applicable</p>
         <p class="small">(Former name or former address, if changed since last report)</p>
       </div>
 
-      <p style="margin-top:20px; text-indent:0.4in;">Check the appropriate box below if the Form 8-K filing is
+      <p style="margin-top:10px; text-indent:0.4in;">Check the appropriate box below if the Form 8-K filing is
       intended to simultaneously satisfy the filing obligation of the registrant under any of the following
       provisions:</p>
       <p>&#9744;&nbsp; Written communications pursuant to Rule 425 under the Securities Act (17 CFR 230.425)</p>
@@ -437,14 +438,14 @@ def _draft_html(draft: dict) -> str:
       <p>&#9744;&nbsp; Pre-commencement communications pursuant to Rule 14d-2(b) under the Exchange Act (17 CFR 240.14d-2(b))</p>
       <p>&#9744;&nbsp; Pre-commencement communications pursuant to Rule 13e-4(c) under the Exchange Act (17 CFR 240.13e-4(c))</p>
 
-      <p class="center" style="margin-top:16px;">Securities registered pursuant to Section 12(b) of the Act:</p>
+      <p class="center" style="margin-top:10px;">Securities registered pursuant to Section 12(b) of the Act:</p>
       <table class="exhibits">
         <thead><tr><th>Title of each class</th><th>Trading Symbol(s)</th>
         <th>Name of each exchange on which registered</th></tr></thead>
         <tbody>{sec_rows}</tbody>
       </table>
 
-      <p style="margin-top:16px;">Indicate by check mark whether the registrant is an emerging growth company as
+      <p style="margin-top:10px;">Indicate by check mark whether the registrant is an emerging growth company as
       defined in Rule 405 of the Securities Act of 1933 (&sect;230.405 of this chapter) or Rule 12b-2 of the
       Securities Exchange Act of 1934 (&sect;240.12b-2 of this chapter).</p>
       <p>Emerging growth company {egc}</p>
