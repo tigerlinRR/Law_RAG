@@ -187,9 +187,7 @@ def draft_to_word(draft: dict) -> bytes:
             run.font.size = Pt(size)
         return p
 
-    centered("DRAFT — FOR INTERNAL REVIEW ONLY — NOT FILED WITH THE SEC", bold=True)
-
-    centered("UNITED STATES", bold=True, gap_before=6)
+    centered("UNITED STATES", bold=True)
     centered("SECURITIES AND EXCHANGE COMMISSION", bold=True)
     centered("Washington, D.C. 20549", bold=True)
     centered("FORM 8-K", bold=True, size=14, gap_before=7)
@@ -399,8 +397,6 @@ def _draft_html(draft: dict) -> str:
       .appendix-note {{ color: #555; font-size: 12px; }}
     </style></head><body>
 
-      <div class="draft-banner">DRAFT &mdash; FOR INTERNAL REVIEW ONLY &mdash; NOT FILED WITH THE SEC</div>
-      <hr>
       <div class="cover center">
         <p class="bold">UNITED STATES</p>
         <p class="bold">SECURITIES AND EXCHANGE COMMISSION</p>
