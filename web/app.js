@@ -602,15 +602,47 @@ function renderDraftInto(r, report, meta) {
     report.appendChild(bar2);
   }
 
-  const p = el("div", "panel");
-  p.appendChild(el("h3", null, "Disclosure (draft)"));
-  p.appendChild(el("div", "summary", r.disclosure || ""));
-  if (r._forward_looking_statements) {
-    p.appendChild(el("p", "auto-note",
-      "Includes a Forward-Looking Statements legend in the exported filing, because " +
-      "this disclosure contains forward-looking language."));
-  }
-  report.appendChild(p);
+  // The filing content, laid out Item by Item as readable text (what the Word/PDF
+  // contains, minus the boilerplate cover page) — each Item in its own section.
+  const fc = el("div", "panel filing-view");
+  fc.appendChild(el("h3", null, "Filing content"));
+
+  const itemSection = (num, title, bodyBuilder) => {
+    const sec = el("div", "item-sec");
+    sec.appendChild(el("div", "item-heading", `Item ${num}. ${title}`));
+    bodyBuilder(sec);
+    fc.appendChild(sec);
+  };
+
+  itemSection(r.item, (r.item_title || "") + ".", (sec) => {
+    (r.disclosure || "").split("\n\n").map((s) => s.trim()).filter(Boolean)
+      .forEach((para) => sec.appendChild(el("p", "item-para", para)));
+    if (r._forward_looking_statements) {
+      sec.appendChild(el("div", "item-subhead", "Forward-Looking Statements"));
+      sec.appendChild(el("p", "item-para", r._forward_looking_statements));
+    }
+  });
+
+  itemSection("9.01", "Financial Statements and Exhibits.", (sec) => {
+    sec.appendChild(el("p", "item-para", "(d) Exhibits"));
+    const date = filingDateFromDisclosure(r.disclosure);
+    const rows = [
+      ["10.1", `${r._doc_type || "Agreement"}${date ? ", dated " + date : ""}`],
+      ["104", "Cover Page Interactive Data File (embedded within the Inline XBRL documents)"],
+    ];
+    const table = el("table", "clauses exhibit-table");
+    table.innerHTML = "<thead><tr><th>Exhibit</th><th>Description</th></tr></thead>";
+    const tb = el("tbody");
+    rows.forEach(([ex, desc]) => {
+      const tr = el("tr");
+      tr.appendChild(el("td", null, ex));
+      tr.appendChild(el("td", null, desc));
+      tb.appendChild(tr);
+    });
+    table.appendChild(tb);
+    sec.appendChild(table);
+  });
+  report.appendChild(fc);
 
   if (meta && meta.id != null) {
     const bcPanel = el("div", "panel");
@@ -654,93 +686,21 @@ function renderDraftInto(r, report, meta) {
     btnRow.appendChild(bcStatus);
     bcPanel.appendChild(btnRow);
     report.appendChild(bcPanel);
-
-    // Inline PDF preview — placed after the editable text/context so those stay
-    // reachable, and the large rendered view sits below them. The panel breaks out
-    // of the narrow content column to a wide view (see .preview-panel in CSS).
-    const pv = el("div", "panel preview-panel");
-    const pvHead = el("div", "preview-head");
-    pvHead.appendChild(el("h3", null, "Preview — exactly what the file contains"));
-    const pvToggle = el("div", "preview-toggle");
-    const btnFiling = el("button", "btn-ghost active", "8-K filing");
-    const btnReview = el("button", "btn-ghost", "Review pack");
-    const openTab = el("a", "btn-ghost", "Open in new tab ↗");
-    openTab.target = "_blank"; openTab.rel = "noopener";
-    pvToggle.appendChild(btnFiling);
-    pvToggle.appendChild(btnReview);
-    pvToggle.appendChild(openTab);
-    pvHead.appendChild(pvToggle);
-    pv.appendChild(pvHead);
-    const frame = el("iframe", "pdf-preview");
-    frame.title = "8-K PDF preview";
-    const bust = () => `?v=${Date.now()}`;
-    let previewPath = "pdf";
-    const show = (path) => {
-      previewPath = path;
-      const url = `/api/generations/${meta.id}/preview/${path}${bust()}`;
-      frame.src = url;
-      openTab.href = url;
-    };
-    show("pdf");
-    btnFiling.addEventListener("click", () => {
-      btnFiling.classList.add("active"); btnReview.classList.remove("active"); show("pdf");
-    });
-    btnReview.addEventListener("click", () => {
-      btnReview.classList.add("active"); btnFiling.classList.remove("active"); show("review-pdf");
-    });
-    pv.appendChild(frame);
-    report.appendChild(pv);
-  }
-
-  if (r._compliance && r._compliance.length) {
-    const cp = el("div", "panel");
-    cp.appendChild(el("h3", null, "SEC requirement checks"));
-    r._compliance.forEach((c) => {
-      const row = el("div", "risk-item");
-      row.appendChild(el("span", c.satisfied ? "" : "flag", c.satisfied ? "✓ " : "✗ "));
-      row.appendChild(el("span", null, c.requirement));
-      cp.appendChild(row);
-    });
-    report.appendChild(cp);
-  }
-
-  if (r._precedents_used && r._precedents_used.length) {
-    const pp = el("div", "panel");
-    pp.appendChild(el("h3", null, "Precedents used (style reference only)"));
-    const chips = el("div", "chips");
-    r._precedents_used.forEach((x) => chips.appendChild(el("span", "chip", x)));
-    pp.appendChild(chips);
-    report.appendChild(pp);
-  }
-
-  if (r.facts_used && r.facts_used.length) {
-    const fp = el("div", "panel");
-    fp.appendChild(el("h3", null, "Fact -> source trace"));
-    const table = el("table", "clauses");
-    table.innerHTML = "<thead><tr><th>Fact</th><th>Source quote</th></tr></thead>";
-    const tb = el("tbody");
-    r.facts_used.forEach((f) => {
-      const tr = el("tr");
-      tr.appendChild(el("td", null, f.fact || ""));
-      const q = el("td", "quote");
-      if (f.source === "business_context") {
-        q.appendChild(el("span", "bc-flag", "Business input (not a contract citation) — "));
-      } else if (f.verified === false) {
-        q.appendChild(el("span", "warn-flag", "⚠ UNVERIFIED — "));
-      }
-      q.appendChild(document.createTextNode(f.source_quote || ""));
-      tr.appendChild(q);
-      tb.appendChild(tr);
-    });
-    table.appendChild(tb);
-    fp.appendChild(table);
-    report.appendChild(fp);
   }
 
   const d = el("div", "disclaimer");
-  d.textContent = "Experimental AI-drafted disclosure. Verify every row above against " +
-    "the source contract before relying on it — this is not a finished filing.";
+  d.textContent = "Experimental AI-drafted disclosure. A lawyer must review it against " +
+    "the source contract before relying on it — this is not a finished filing. " +
+    "The separate Review pack download contains the SEC-requirement checks, " +
+    "precedents used, and the fact→source-quote trace.";
   report.appendChild(d);
+}
+
+// First "Month DD, YYYY" in the disclosure — the event date (mirrors
+// export._report_date), used for the Item 9.01 exhibit description.
+function filingDateFromDisclosure(disclosure) {
+  const m = (disclosure || "").match(/\b([A-Z][a-z]+ \d{1,2}, \d{4})\b/);
+  return m ? m[1] : "";
 }
 
 /* ---------------- users (admin) ---------------- */

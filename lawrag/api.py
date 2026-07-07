@@ -390,24 +390,6 @@ def delete_generation(gen_id: int, user: dict = Depends(current_user)) -> dict:
     return {"ok": True}
 
 
-# Same PDFs as /export/pdf|review-pdf, but WITHOUT "attachment" so the browser
-# renders them inline (e.g. in an <iframe>) instead of downloading — lets a
-# reviewer see exactly what the real document looks like before deciding to
-# download it.
-@app.get("/api/generations/{gen_id}/preview/pdf")
-def preview_generation_pdf(gen_id: int, user: dict = Depends(current_user)) -> StreamingResponse:
-    g = _get_generation_or_404(gen_id, user)
-    data = export.draft_to_pdf(g["result"])
-    return StreamingResponse(io.BytesIO(data), media_type="application/pdf")
-
-
-@app.get("/api/generations/{gen_id}/preview/review-pdf")
-def preview_review_pdf(gen_id: int, user: dict = Depends(current_user)) -> StreamingResponse:
-    g = _get_generation_or_404(gen_id, user)
-    data = export.review_to_pdf(g["result"])
-    return StreamingResponse(io.BytesIO(data), media_type="application/pdf")
-
-
 # ---------- user management (admin only) ----------
 class NewUser(BaseModel):
     username: str

@@ -254,18 +254,16 @@ Downloaded filenames are named after the contract's actual event date, not the
 internal generation id, e.g. `2025-08-21 - 8-K Draft.docx` / `2025-08-21 - 8-K
 Draft - Review.pdf`.
 
-**Live preview.** Every draft (Generate 8-K and History) embeds the actual
-rendered PDF inline — the real cover page, Item text, exhibit index, and
-signature block, not just the plain disclosure text shown above it — with a
-toggle between the 8-K filing and the review pack. Served from `/api/
-generations/{id}/preview/pdf` and `/preview/review-pdf` (same PDFs as the
-`/export/...` downloads, just without the `attachment` disposition so the
-browser renders them instead of downloading), so what a reviewer sees is
-exactly what they would get from the download buttons. The preview breaks out
-of the normal content column to a wide, tall view (up to ~1500px / 90vh) and
-has an **Open in new tab** link for a full-window read, so a full-page 8-K is
-legible rather than squeezed. The editable disclosure text and business-context
-box sit above it, so they stay reachable without scrolling past the preview.
+**On-screen view — the filing content, Item by Item.** Every draft (Generate
+8-K and History) shows a **Filing content** panel that lays out the substantive
+filing as clean, readable text, one section per Item — Item 1.01 (the disclosure
+paragraphs, plus the Forward-Looking Statements legend when present) and Item
+9.01 (the exhibit index: 10.1 = the source agreement dated the event date, 104 =
+the cover-page XBRL) — mirroring the Word/PDF filing body without the boilerplate
+cover page. The SEC-requirement checks, precedents used, and fact→source-quote
+trace are **not** shown here — they live in the downloadable **Review pack**
+(Word/PDF), keeping the on-screen view focused on what will actually be filed.
+The exact formatted document is always one click away via the download buttons.
 
 Every generated draft is re-accessible from the **History** tab (persisted in
 the `generations` table, client-scoped), and each row has a **Delete** button to
