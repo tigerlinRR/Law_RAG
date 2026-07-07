@@ -209,6 +209,31 @@ SEC disclosures are fact-critical, so this stays retrieval + extraction:
     --client "Richtech Robotics Inc." --docx draft.docx --pdf draft.pdf
 ```
 
+**Matches real-filing conventions for two edge cases, found by testing against
+Richtech's own real filings:**
+- **Redacted source contracts.** Some exhibits are filed with portions redacted
+  under Item 601(b)(10)(iv) of Regulation S-K, which left literal block-placeholder
+  glyphs in the extracted text; the drafting step was echoing them straight into
+  the disclosure (e.g. "████████ Inc."). `summarize.review_contract` now collapses
+  those glyphs to a `[REDACTED]` marker before the fact ever reaches the drafting
+  prompt, and the prompt instructs the model to describe that party only by a
+  short generic role-based reference — exactly how Richtech's own filings handle
+  it (e.g. "one of the largest retailers in the world (the "Client")") — never by
+  printing placeholder characters. A `_compliance` check flags any residual
+  redaction marker as a safety net.
+- **Forward-Looking Statements legend.** Only 3 of Richtech's 17 real Item 1.01
+  filings carry the PSLRA safe-harbor "Forward-Looking Statements" paragraph — always
+  tied to the disclosure itself containing forward-looking language about the
+  Company's own future plans/beliefs (e.g. "the Company intends to utilize..."),
+  never added by default. The drafting step checks the finished disclosure for
+  that kind of self-referential future-intent phrasing and, if present, appends
+  Richtech's own verbatim legend as its own labeled section between the Item
+  disclosure and Item 9.01 — matching where real filings place it.
+
+Downloaded filenames are named after the contract's actual event date, not the
+internal generation id, e.g. `2025-08-21 - 8-K Draft.docx` / `2025-08-21 - 8-K
+Draft - Review.pdf`.
+
 Started with **Item 1.01 (Entry into a Material Definitive Agreement)**: the most
 common trigger, most template-able disclosure, and its inputs (parties, term,
 payment, termination) map directly onto fields the due-diligence engine already

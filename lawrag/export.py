@@ -149,6 +149,17 @@ def _report_date(draft: dict) -> str:
     return "[DATE]"
 
 
+def filing_date_iso(draft: dict) -> str:
+    """The contract/event date in YYYY-MM-DD, for naming downloaded files after the
+    actual transaction date (matches how the rest of the project's own historical
+    filings/contracts are named) rather than an opaque internal generation id."""
+    import datetime
+    try:
+        return datetime.datetime.strptime(_report_date(draft), "%B %d, %Y").strftime("%Y-%m-%d")
+    except ValueError:
+        return "undated"
+
+
 def _disclosure_paragraphs(draft: dict) -> list[str]:
     """Split the disclosure into paragraphs, dropping a leading 'Item X.XX...'
     line if the model repeated the heading we already render separately."""
@@ -256,6 +267,13 @@ def draft_to_word(draft: dict) -> bytes:
     for para in _disclosure_paragraphs(draft):
         p = doc.add_paragraph(para)
         p.paragraph_format.first_line_indent = docx.shared.Inches(0.4)
+
+    fls = draft.get("_forward_looking_statements")
+    if fls:
+        fp = doc.add_paragraph()
+        fp.paragraph_format.space_before = Pt(6)
+        fp.add_run("Forward-Looking Statements").bold = True
+        doc.add_paragraph(fls)
 
     doc.add_paragraph().add_run("Item 9.01. Financial Statements and Exhibits.").bold = True
     doc.add_paragraph("(d) Exhibits")
@@ -366,6 +384,9 @@ def _draft_html(draft: dict) -> str:
     date = _report_date(draft)
 
     disclosure_html = "".join(f"<p>{esc(para)}</p>" for para in _disclosure_paragraphs(draft))
+    fls = draft.get("_forward_looking_statements")
+    fls_html = (f"<h2>Forward-Looking Statements</h2><p style='text-indent:0;'>{esc(fls)}</p>"
+                if fls else "")
     sec_rows = "".join(
         f"<tr><td>{esc(cls)}</td><td style='text-align:center'>{esc(sym)}</td>"
         f"<td style='text-align:center'>{esc(exch)}</td></tr>"
@@ -452,6 +473,7 @@ def _draft_html(draft: dict) -> str:
       <div class="pagebreak filing">
         <h2>Item {esc(draft.get('item',''))}. {esc(draft.get('item_title',''))}.</h2>
         {disclosure_html}
+        {fls_html}
         <h2>Item 9.01. Financial Statements and Exhibits.</h2>
         <p style="text-indent:0;">(d) Exhibits</p>
         <table class="exhibits">

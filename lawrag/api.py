@@ -322,37 +322,43 @@ def _get_generation_or_404(gen_id: int, user: dict) -> dict:
 
 
 # The 8-K filing itself (clean, ready to finalize) and the review pack (separate,
-# for counsel) are DISTINCT downloads — never combined in one file.
+# for counsel) are DISTINCT downloads — never combined in one file. Named after the
+# actual contract/event date (not the internal generation id) to match how the
+# firm's own filings/contracts are named, e.g. "2025-08-21 - 8-K Draft.docx".
 @app.get("/api/generations/{gen_id}/export/word")
 def export_generation_word(gen_id: int, user: dict = Depends(current_user)) -> StreamingResponse:
     g = _get_generation_or_404(gen_id, user)
     data = export.draft_to_word(g["result"])
+    name = f"{export.filing_date_iso(g['result'])} - 8-K Draft.docx"
     return StreamingResponse(io.BytesIO(data), media_type=_DOCX, headers={
-        "Content-Disposition": f'attachment; filename="8k-draft-{gen_id}.docx"'})
+        "Content-Disposition": f'attachment; filename="{name}"'})
 
 
 @app.get("/api/generations/{gen_id}/export/pdf")
 def export_generation_pdf(gen_id: int, user: dict = Depends(current_user)) -> StreamingResponse:
     g = _get_generation_or_404(gen_id, user)
     data = export.draft_to_pdf(g["result"])
+    name = f"{export.filing_date_iso(g['result'])} - 8-K Draft.pdf"
     return StreamingResponse(io.BytesIO(data), media_type="application/pdf", headers={
-        "Content-Disposition": f'attachment; filename="8k-draft-{gen_id}.pdf"'})
+        "Content-Disposition": f'attachment; filename="{name}"'})
 
 
 @app.get("/api/generations/{gen_id}/export/review-word")
 def export_review_word(gen_id: int, user: dict = Depends(current_user)) -> StreamingResponse:
     g = _get_generation_or_404(gen_id, user)
     data = export.review_to_word(g["result"])
+    name = f"{export.filing_date_iso(g['result'])} - 8-K Draft - Review.docx"
     return StreamingResponse(io.BytesIO(data), media_type=_DOCX, headers={
-        "Content-Disposition": f'attachment; filename="8k-draft-{gen_id}-review.docx"'})
+        "Content-Disposition": f'attachment; filename="{name}"'})
 
 
 @app.get("/api/generations/{gen_id}/export/review-pdf")
 def export_review_pdf(gen_id: int, user: dict = Depends(current_user)) -> StreamingResponse:
     g = _get_generation_or_404(gen_id, user)
     data = export.review_to_pdf(g["result"])
+    name = f"{export.filing_date_iso(g['result'])} - 8-K Draft - Review.pdf"
     return StreamingResponse(io.BytesIO(data), media_type="application/pdf", headers={
-        "Content-Disposition": f'attachment; filename="8k-draft-{gen_id}-review.pdf"'})
+        "Content-Disposition": f'attachment; filename="{name}"'})
 
 
 # ---------- user management (admin only) ----------

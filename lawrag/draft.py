@@ -105,6 +105,10 @@ def _checklist_for(item: str) -> list[str]:
 
 # Defined terms that name a party/role, not the instrument being disclosed — the
 # qualifier must reference the instrument ("the Note"), never the registrant.
+# Safety net for rule 8 in _SYSTEM: catches the model still leaking the literal
+# "[REDACTED]" marker or raw block/placeholder glyphs into a finished disclosure.
+_HAS_REDACTION_LEAK = re.compile(r"\[REDACTED\]|[▀-▟■-◿]{2,}|\*{3,}")
+
 _PARTY_TERMS = {
     "company", "investor", "holder", "vendor", "client", "purchaser", "seller",
     "borrower", "lender", "buyer", "supplier", "party", "parties", "sec",
@@ -223,7 +227,16 @@ _SYSTEM = (
     "material facts is correct, not a shortcoming.\n"
     "7. TONE: neutral and factual, written for the general investing public. Do NOT "
     "use promotional or puffery language (no 'exciting', 'leading', 'transformative', "
-    "etc.). State the facts plainly."
+    "etc.). State the facts plainly.\n"
+    "8. If an extracted fact's value contains the marker '[REDACTED]', the source "
+    "contract itself redacts that information (e.g. under Item 601(b)(10)(iv) of "
+    "Regulation S-K). NEVER write '[REDACTED]' or any placeholder characters into the "
+    "disclosure, and never guess what was redacted. Instead refer to that party or "
+    "term only by a short generic role-based description, exactly as Richtech's own "
+    "real filings do — e.g. 'with one of the largest retailers in the world (the "
+    "\"Client\")' rather than naming a redacted counterparty. If no natural generic "
+    "description is available from the other facts, use a bare defined term like "
+    "'a third party (the \"Client\")' with no further description."
 )
 
 # Mandatory SEC disclosure requirements per Item, from Richtech counsel's guidance
@@ -292,6 +305,57 @@ ITEM_RULES: dict[str, str] = {
 }
 
 
+# Richtech includes this exact safe-harbor legend (verbatim, unchanged across every
+# real filing that needs it) whenever an Item disclosure contains forward-looking
+# language about the Company's own future plans/beliefs -- as opposed to simply
+# reciting the agreement's terms, which is a statement of present/historical fact and
+# does not require it. Only 3 of Richtech's 17 real Item 1.01 filings have it, always
+# tied to the disclosure itself using forward-looking phrasing (e.g. "the Company
+# intends to...", "we believe will...", "with the aim of..."), never added by default.
+_FORWARD_LOOKING_STATEMENTS = (
+    "This Current Report on Form 8-K includes “forward-looking statements” "
+    "within the meaning of Section 27A of the Securities Act and Section 21E of the "
+    "Securities Exchange Act of 1934, as amended. All statements other than "
+    "statements of historical fact included in this Form 8-K are forward-looking "
+    "statements. When used in this Form 8-K, words such as “anticipate,” "
+    "“believe,” “continue,” “could,” “estimate,” "
+    "“expect,” “intend,” “may,” “might,” "
+    "“plan,” “possible,” “potential,” “predict,” "
+    "“project,” “should,” “would” and similar "
+    "expressions, as they relate to us or our management team, identify "
+    "forward-looking statements. Such forward-looking statements are based on the "
+    "beliefs of the Company's management, as well as assumptions made by, and "
+    "information currently available to, the Company's management. Actual results "
+    "could differ materially from those contemplated by the forward-looking "
+    "statements as a result of certain factors detailed in the Company's filings "
+    "with the SEC. All subsequent written or oral forward-looking statements "
+    "attributable to the Company or persons acting on its behalf are qualified in "
+    "their entirety by this paragraph. Forward-looking statements are subject to "
+    "numerous conditions, many of which are beyond the control of the Company, "
+    "including those set forth in the “Risk Factors” section of the "
+    "Company's Annual Reports on Form 10-K, Quarterly Reports on Form 10-Q and "
+    "initial public offering prospectus. The Company undertakes no obligation to "
+    "update these statements for revisions or changes after the date of this "
+    "release, except as required by law."
+)
+
+# Narrower than the boilerplate's own word list (which includes generic modals like
+# "may"/"could"/"would" that appear constantly in plain contract-mechanics prose,
+# e.g. "the Purchaser may terminate") -- this only matches phrasing that asserts the
+# COMPANY's own future plans, intent, or belief, which is what actually triggered the
+# legend in Richtech's own real filings.
+_FLS_TRIGGER_RE = re.compile(
+    r"\b(intends? to|plans? to|expects? to|is expected to|anticipates? that|"
+    r"we believe|the company believes?|aims? to|with the aim of|will serve as|"
+    r"designed to (?:support|further)|in order to support)\b",
+    re.IGNORECASE,
+)
+
+
+def _needs_forward_looking_statements(disclosure: str) -> bool:
+    return bool(_FLS_TRIGGER_RE.search(disclosure))
+
+
 def _facts_block(review: dict) -> str:
     lines = [
         f"Parties: {', '.join(review.get('parties', [])) or '[unknown]'}",
@@ -336,6 +400,7 @@ def _compliance_flags(item: str, disclosure: str) -> list[dict]:
         ]
     else:
         checks = [("exhibit incorporation-by-reference", "qualified in its entirety" in d)]
+    checks.append(("no unresolved redaction markers", not _HAS_REDACTION_LEAK.search(disclosure)))
     return [{"requirement": name, "satisfied": ok} for name, ok in checks]
 
 
@@ -382,6 +447,8 @@ def draft_8k(
     if item == "1.01":
         disc = _ensure_material_relationship(disc)
     result["disclosure"] = _ensure_exhibit_qualifier(disc)
+    if _needs_forward_looking_statements(result["disclosure"]):
+        result["_forward_looking_statements"] = _FORWARD_LOOKING_STATEMENTS
     result["_compliance"] = _compliance_flags(item, result["disclosure"])
     full_text = review.get("_full_text", "")
     for f in result.get("facts_used", []):

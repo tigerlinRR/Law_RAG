@@ -10,11 +10,26 @@ Design choices tuned for reliability on a local model:
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from . import llm
 from .config import CONFIG
 from .parsers import parse
+
+# Some Richtech exhibits are filed with portions redacted under Item 601(b)(10)(iv)
+# -- the PDF text extraction then contains literal block/placeholder glyphs (e.g.
+# a run of "█"). Those are source-formatting artifacts, not real fact content;
+# collapse them to a single marker so extraction never hands the drafting step a
+# wall of glyphs to unwittingly echo into a filing.
+_REDACTION_RE = re.compile(r"[▀-▟■-◿]{2,}|\*{3,}|_{5,}")
+
+
+def _scrub_redactions(value: str) -> str:
+    if not value:
+        return value
+    cleaned = _REDACTION_RE.sub("[REDACTED]", value)
+    return re.sub(r"(\[REDACTED\][ ,]*){2,}", "[REDACTED] ", cleaned).strip()
 
 # Standard due-diligence clause checklist for commercial contracts.
 CHECKLIST = [
@@ -138,7 +153,12 @@ def review_contract(path: str | Path, checklist: list[str] | None = None) -> dic
         windows = [full[i:i + step] for i in range(0, len(full), step)]
         result = _merge([_extract_pass(w, checklist) for w in windows], checklist)
 
+    result["parties"] = [_scrub_redactions(p) for p in result.get("parties", [])]
+    result["summary"] = _scrub_redactions(result.get("summary", ""))
     for cl in result.get("clauses", []):
+        # Scrub the VALUE only -- `quote` must stay byte-for-byte from the source
+        # for verify_quote()/the review-pack audit trail, redaction glyphs and all.
+        cl["value"] = _scrub_redactions(cl.get("value", ""))
         if cl.get("value", "").strip().lower() not in ("", "not found"):
             cl["verified"] = verify_quote(cl.get("quote", ""), full)
 
