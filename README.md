@@ -240,6 +240,53 @@ draft from — bankruptcy (1.03), results of operations (2.02), delisting notice
 other events (7.01/8.01). This tool drafts a disclosure *from a document*; those
 Items don't have one.
 
+**Materiality rubric (Item 1.01) — learning *what counsel treats as material*,
+not just how they phrase it.** Matching precedents' tone and structure isn't
+enough on its own: real filings also make deliberate *inclusion/omission*
+choices (e.g. governing law is essentially never called out; earnest money
+always is for a real-estate deal) that a generic checklist doesn't capture.
+With only 17 real Item 1.01 filings on hand, fine-tuning would memorize rather
+than generalize — not enough data for gradient-based weight updates to learn a
+reliable pattern. Instead we built an explicit, auditable rubric by systematically
+comparing **all 17 of Richtech's real Item 1.01 8-Ks against their underlying
+source contracts** (`data/RR contracts/`, one contract per filing, two filings
+sharing a sibling's agreement as a follow-on/amendment): for each contract, every
+checklist term found by the extraction engine was checked against the real
+filing's Item 1.01 text to see whether that term's *topic* was actually
+disclosed. This is machine learning in the sense of learning a pattern from
+data — just an explicit, inspectable rubric suited to small-N, rather than
+opaque weight updates.
+
+Aggregated across all 17 pairs, terms fall into three bands:
+
+| Band | Terms (with hit rate) |
+|------|------------------------|
+| **Always** disclosed when present | Nature of transaction (17/17), asset description incl. size/location (14/14), maturity/term (8/8), redemption rights (3/3), earnest money/deposit (2/2), parties (22/23), effective date (21/22) |
+| **Usually** disclosed, deal-type dependent | Purchase price (16/20), financing amount (5/6), conversion terms (7/8), interest rate (4/6, always for notes), closing timing/conditions (~50%, high for real estate, low for services) |
+| **Rarely or never** disclosed as an individual term | Governing law (0/10), assignment/change-of-control (0/4), limitation of liability (1/6), dispute resolution (1/6), use of proceeds (0/2) — these are folded into a boilerplate catch-all instead |
+
+This is encoded directly in `draft.ITEM_CHECKLISTS["1.01"]` (a 23-field checklist
+covering every deal type Item 1.01 spans — financings, real estate, notes,
+services, M&A) and `draft.ITEM_RULES["1.01"]` (an explicit ALWAYS/USUALLY/
+RARELY-OR-NEVER rubric, each band annotated with its real hit-rate, injected
+into the drafting prompt alongside the mandatory (a)-(d) SEC requirements — with
+an explicit instruction that when the rubric conflicts with clear case-by-case
+materiality, prefer *including* the term, since omission is the greater legal
+risk). One category of gap is fundamental and not fixable by any
+document-grounded approach: business-context narrative that isn't in the
+contract at all (e.g. *why* a property matters strategically) — RAG can only
+disclose what the source document contains.
+
+**Held-out validation.** The same real-estate Purchase & Sale Agreement used in
+the original held-out test (its own real 8-K excluded from the precedent pool)
+was re-drafted after the rubric change. All three previously-missing facts now
+appear correctly — building size (79,325 sq ft), earnest money ($600,000), and
+closing timing (15 days post-inspection) — while boilerplate terms (governing
+law, assignment, dispute resolution) are correctly folded into the catch-all
+rather than enumerated. All five SEC compliance checks pass: (a) date, (b)
+parties, (c) material-relationship statement, (d) material terms, and the
+exhibit-incorporation qualifier.
+
 **Three real held-out tests done** (a real contract with its own real resulting
 8-K excluded from its precedent pool, then compared against what was actually
 filed): Item 1.01 (Master Services Agreement), Item 2.03 (convertible promissory

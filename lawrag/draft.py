@@ -43,6 +43,25 @@ ITEM_TITLES = {
 # deliberately omitted; this tool drafts a disclosure FROM a document. Items not
 # listed fall back to the default general-commercial-contract checklist.
 ITEM_CHECKLISTS: dict[str, list[str]] = {
+    "1.01": [  # Entry into a Material Definitive Agreement
+        # Item 1.01 spans many deal types (real estate, financing, services,
+        # securities), so it needs a broader extraction than the default
+        # services-contract checklist -- notably asset description/size and
+        # deposit/earnest money, which the default checklist lacks and which
+        # the materiality-rubric analysis (see ITEM_RULES) showed are almost
+        # always disclosed when present.
+        "Parties", "Effective Date / Signing Date", "Nature of Transaction",
+        "Asset(s) Involved (description, size, location, quantity)",
+        "Purchase Price / Consideration", "Deposit / Earnest Money",
+        "Financing Amount / Principal", "Interest Rate / Discount",
+        "Maturity / Term / Duration", "Payment / Repayment Terms",
+        "Closing / Completion Conditions", "Closing / Completion Timing",
+        "Termination Rights", "Exclusivity / Non-Compete",
+        "Conversion / Exchange Terms", "Redemption Rights",
+        "Governing Law", "Confidentiality", "Indemnification",
+        "Limitation of Liability", "Representations and Warranties",
+        "Assignment / Change of Control", "Dispute Resolution",
+    ],
     "1.02": [  # Termination of a Material Definitive Agreement
         "Parties", "Agreement Being Terminated (title and date)",
         "Termination Date", "Reason / Trigger for Termination",
@@ -208,8 +227,12 @@ _SYSTEM = (
 )
 
 # Mandatory SEC disclosure requirements per Item, from Richtech counsel's guidance
-# (Form 8-K rules + the materiality standard from TSC Industries / Basic v. Levinson).
-# Injected into the prompt so the draft is built to satisfy them, and checked after.
+# (Form 8-K rules + the materiality standard from TSC Industries / Basic v. Levinson)
+# PLUS a data-derived materiality rubric: which terms Richtech's own counsel has
+# actually chosen to disclose vs. omit, measured by comparing all 17 of Richtech's
+# real Item-1.01 filings against their underlying contracts (see
+# law-rag-project-plan memory, "materiality rubric" entry, for the full breakdown).
+# This is what counsel's judgment looks like in practice, not just the legal text.
 ITEM_RULES: dict[str, str] = {
     "1.01": (
         "SEC Item 1.01 (Entry into a Material Definitive Agreement) — the disclosure "
@@ -226,22 +249,45 @@ ITEM_RULES: dict[str, str] = {
         "registrant.\n"
         "MATERIALITY TEST for (d): a term is material if there is a substantial "
         "likelihood a reasonable shareholder would consider it important — i.e. its "
-        "disclosure would significantly alter the 'total mix' of information. When a "
-        "term is arguably material, INCLUDE it — omitting a material term is the "
-        "greater risk; defer only genuine boilerplate to the exhibit. For financing / "
-        "business-combination agreements, treat these as presumptively material: the "
-        "amount and nature of consideration (or the formula / exchange ratio); "
-        "committed financing (e.g. a PIPE) and its material terms; post-closing "
-        "ownership or management structure; material closing conditions; and the "
-        "anticipated timeframes for related filings and for closing.\n"
-        "ALSO, for the type of agreement at hand: (i) for an asset purchase or "
-        "disposition, state the QUANTITATIVE characteristics of the asset (e.g. square "
-        "footage, unit count, quantity) and its location, plus the closing / "
-        "consummation timing and any material closing conditions; (ii) close the "
-        "material-terms description with a brief statement that the agreement contains "
-        "representations, warranties, covenants, and indemnification provisions that "
-        "are customary for transactions of this type (rather than omitting them "
-        "silently) — this is how real filings account for the remaining terms."
+        "disclosure would significantly alter the 'total mix' of information.\n\n"
+        "MATERIALITY RUBRIC — derived from comparing all of Richtech's own real "
+        "Item 1.01 filings against their underlying contracts, i.e. what Richtech's "
+        "counsel has actually chosen to disclose in practice:\n"
+        "ALWAYS include, when present in the contract:\n"
+        "  - the nature of the transaction, in plain language\n"
+        "  - the asset(s) involved, WITH quantitative characteristics (square footage, "
+        "unit count, quantity) and location\n"
+        "  - the purchase price / consideration / financing amount\n"
+        "  - the term / duration / maturity\n"
+        "  - deposit or earnest money, if any\n"
+        "  - conversion or exchange terms and redemption rights, if any\n"
+        "USUALLY include (deal-type dependent, use judgment):\n"
+        "  - interest rate / discount, and repayment mechanics — ALWAYS for a "
+        "promissory note or other debt instrument; usually omitted for services "
+        "agreements\n"
+        "  - closing / completion timing and conditions — material for asset "
+        "purchases; usually omitted for services or financing agreements\n"
+        "  - termination rights — material for asset purchases (e.g. a due-diligence "
+        "termination right); RICHTECH'S OWN FILINGS RARELY STATE THIS for services "
+        "agreements, even when the contract has one, so default to omitting it there\n"
+        "RARELY OR NEVER include as individually-described terms — Richtech's own "
+        "filings essentially never single these out, REGARDLESS OF DEAL TYPE, even "
+        "though the contract always has them — always collapse into a brief catch-all "
+        "like 'and other customary provisions' if mentioned at all:\n"
+        "  - governing law (0 of 10 real filings that had one stated it)\n"
+        "  - assignment / change-of-control provisions\n"
+        "  - limitation of liability (as a specific term/cap)\n"
+        "  - dispute resolution / arbitration mechanics\n"
+        "  - representations, warranties, indemnification, confidentiality — mention "
+        "only as part of a brief catch-all, not individually described, UNLESS a "
+        "specific provision is genuinely unusual and material (e.g. an uncapped "
+        "indemnity, a one-sided term)\n"
+        "This rubric reflects a modest sample (17 filings) — when it conflicts with "
+        "your own judgment about clear materiality for the specific contract at hand, "
+        "prefer INCLUDING an arguably-material term (omission is the greater risk), "
+        "but do not use it as license to enumerate everything — the rubric's whole "
+        "point is that Richtech's counsel is selective even about facts the general "
+        "SEC materiality standard alone would not clearly resolve."
     ),
 }
 
