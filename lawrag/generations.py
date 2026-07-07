@@ -53,6 +53,15 @@ def list_for(allowed_clients: list[str] | None) -> list[dict]:
         ]
 
 
+def update_result(gen_id: int, result: dict) -> None:
+    """Overwrite a generation's stored result in place (e.g. after a reviewer adds
+    business context) -- same record, revised content, not a new History entry."""
+    with db.connect() as conn, conn.cursor() as cur:
+        cur.execute("UPDATE generations SET result=%s WHERE id=%s",
+                     (json.dumps(result), gen_id))
+        conn.commit()
+
+
 def get(gen_id: int, allowed_clients: list[str] | None) -> dict | None:
     """Returns None if not found OR outside the caller's allowed clients."""
     with db.connect() as conn, conn.cursor() as cur:

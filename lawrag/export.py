@@ -349,7 +349,10 @@ def review_to_word(draft: dict) -> bytes:
             cells = table.add_row().cells
             cells[0].text = f.get("fact", "")
             cells[1].text = f.get("source_quote", "")
-            cells[2].text = "Yes" if f.get("verified") else "⚠ UNVERIFIED"
+            if f.get("source") == "business_context":
+                cells[2].text = "Business input (not a contract citation — reviewer-provided)"
+            else:
+                cells[2].text = "Yes" if f.get("verified") else "⚠ UNVERIFIED"
 
     all_terms = draft.get("_all_extracted_terms") or []
     if all_terms:
@@ -505,12 +508,16 @@ def _review_html(draft: dict) -> str:
     """The review pack as a SEPARATE document — SEC checks, precedents, fact
     trace, full extraction. Never mixed into the filing."""
     esc = _esc
-    facts_rows = "".join(
-        f"<tr{' class=\"unverified\"' if not f.get('verified') else ''}>"
-        f"<td>{esc(f.get('fact',''))}</td><td>{esc(f.get('source_quote',''))}</td>"
-        f"<td>{'Yes' if f.get('verified') else '⚠ UNVERIFIED'}</td></tr>"
-        for f in draft.get("facts_used") or []
-    )
+    def _fact_row(f):
+        if f.get("source") == "business_context":
+            status = "Business input (not a contract citation — reviewer-provided)"
+            cls = ""
+        else:
+            status = "Yes" if f.get("verified") else "⚠ UNVERIFIED"
+            cls = "" if f.get("verified") else ' class="unverified"'
+        return (f"<tr{cls}><td>{esc(f.get('fact',''))}</td>"
+                f"<td>{esc(f.get('source_quote',''))}</td><td>{esc(status)}</td></tr>")
+    facts_rows = "".join(_fact_row(f) for f in draft.get("facts_used") or [])
     precedents = "".join(f"<li>{esc(p)}</li>" for p in draft.get("_precedents_used") or [])
     all_terms_rows = "".join(
         f"<tr><td>{esc(t.get('name',''))}</td><td>{esc(t.get('value',''))}</td></tr>"

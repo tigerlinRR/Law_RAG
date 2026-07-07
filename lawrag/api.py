@@ -22,7 +22,7 @@ from pydantic import BaseModel
 
 from . import auth, clients, db, export, generations
 from .config import ROOT
-from .draft import ITEM_TITLES, draft_8k
+from .draft import ITEM_TITLES, add_business_context, draft_8k
 from .ingest import DocMeta, ingest_file
 from .parsers import NeedsOCR
 from .retrieve import Filters, search
@@ -222,6 +222,25 @@ async def api_generate_8k(file: UploadFile = File(...), item: str = Form("1.01")
         return JSONResponse({"error": "failed", "detail": str(e)}, status_code=500)
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+class BusinessContextReq(BaseModel):
+    note: str
+
+
+@app.post("/api/generations/{gen_id}/business-context")
+def api_add_business_context(gen_id: int, req: BusinessContextReq,
+                              user: dict = Depends(current_user)) -> dict:
+    """Let a human reviewer (legal/management) add a sentence of business/strategic
+    context the contract itself doesn't state -- e.g. why a property matters to the
+    Company's plans. This is the one category of content a document-grounded draft
+    can never produce on its own; it must come from a person, and is stored clearly
+    attributed to them (not as a contract citation) -- see draft.add_business_context."""
+    g = _get_generation_or_404(gen_id, user)
+    auth.log(user["username"], "add_business_context", f"generation {gen_id}")
+    updated = add_business_context(g["result"], req.note)
+    generations.update_result(gen_id, updated)
+    return {"id": gen_id, "result": updated}
 
 
 class ExportReq(BaseModel):

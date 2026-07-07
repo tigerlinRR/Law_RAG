@@ -229,6 +229,19 @@ Richtech's own real filings:**
   that kind of self-referential future-intent phrasing and, if present, appends
   Richtech's own verbatim legend as its own labeled section between the Item
   disclosure and Item 9.01 — matching where real filings place it.
+  - Checked against the real contracts behind those 3 filings: the forward-looking
+    phrasing (e.g. "a strategic ... facility for warehousing, assembly and light
+    manufacturing") never appears in the contract itself — it's business/strategic
+    context a human adds from outside knowledge of the Company's plans, which by
+    definition no document-grounded extraction can produce. So the drafting step
+    on its own will rarely trigger this legend (correctly — it isn't inventing
+    strategy it wasn't given). Instead, the **web UI has a "Business / strategic
+    context" box** on every draft (Generate 8-K and History) where legal or
+    management can describe that context in a sentence; `draft.add_business_context`
+    turns it into one disclosure sentence, attaches it to the draft clearly marked
+    as reviewer-supplied (not a contract citation, shown separately in the
+    fact→source trace), and adds the legend. `POST /api/generations/{id}/
+    business-context` persists the update to that same History record.
 
 Downloaded filenames are named after the contract's actual event date, not the
 internal generation id, e.g. `2025-08-21 - 8-K Draft.docx` / `2025-08-21 - 8-K

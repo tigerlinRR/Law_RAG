@@ -228,6 +228,20 @@ table.clauses td.quote .warn-flag { color: var(--risk); font-style: normal; font
   display: inline-block; text-decoration: none;
 }
 .btn-ghost:hover { border-color: var(--accent); color: var(--accent-dk); }
+.btn-secondary {
+  font-family: var(--sans); font-size: 13px; font-weight: 600; color: #fff;
+  background: var(--accent); border: 1px solid var(--accent-dk); border-radius: 8px;
+  padding: 8px 16px; cursor: pointer; transition: .15s;
+}
+.btn-secondary:hover { background: var(--accent-dk); }
+.btn-secondary:disabled { opacity: .6; cursor: default; }
+.bc-input {
+  width: 100%; box-sizing: border-box; font-family: var(--sans); font-size: 13.5px;
+  color: var(--ink); background: var(--surface); border: 1px solid var(--line);
+  border-radius: 8px; padding: 8px 10px; resize: vertical; margin-bottom: 8px;
+}
+.bc-actions { display: flex; align-items: center; gap: 10px; }
+table.clauses td.quote .bc-flag { color: var(--accent-dk); font-style: normal; font-weight: 600; }
 .det { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
        box-shadow: var(--shadow); margin-bottom: 12px; padding: 4px 6px; }
 .det > summary { cursor: pointer; font-family: var(--serif); font-size: 16px; font-weight: 700;

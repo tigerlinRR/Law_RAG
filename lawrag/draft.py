@@ -466,3 +466,65 @@ def draft_8k(
         if c.get("value", "").strip().lower() not in ("", "not found")
     ]
     return result
+
+
+_BUSINESS_CONTEXT_SCHEMA = {
+    "type": "object",
+    "properties": {"sentence": {"type": "string"}},
+    "required": ["sentence"],
+}
+
+_BUSINESS_CONTEXT_SYSTEM = (
+    "You are a securities lawyer editing an SEC Form 8-K Item disclosure. Legal or "
+    "management has supplied a business-context note explaining the strategic "
+    "purpose of this transaction -- something true but not stated anywhere in the "
+    "underlying contract (e.g. why an asset matters to the Company's plans). Write "
+    "ONE additional sentence, in the same neutral, factual tone as the rest of the "
+    "disclosure, that states this business context. Do not add anything beyond "
+    "what the note says, do not invent detail, and do not use promotional or "
+    "puffery language."
+)
+
+
+def add_business_context(draft: dict, note: str) -> dict:
+    """Add a sentence describing the transaction's business/strategic purpose, from
+    a note supplied by a human reviewer (legal or management) -- NOT extracted from
+    the contract, because this kind of forward-looking narrative (e.g. Richtech's
+    real "the Company intends to utilize the Property as a strategic ... facility")
+    is routinely present in real filings but never appears in the underlying
+    contract, so no document-grounded extraction can produce it. Clearly attributes
+    the added sentence to the reviewer's own input (not a contract citation) and
+    correctly triggers the Forward-Looking Statements legend, since this is exactly
+    the kind of language that requires it.
+
+    Returns a NEW draft dict; does not mutate `draft`."""
+    note = (note or "").strip()
+    if not note:
+        return draft
+    item = draft.get("item", "")
+    user = (
+        f"=== EXISTING ITEM {item} DISCLOSURE ===\n{draft.get('disclosure', '')}\n\n"
+        f"=== BUSINESS CONTEXT NOTE FROM LEGAL/MANAGEMENT (not from the contract) ===\n"
+        f"{note}\n\nWrite the one sentence to add."
+    )
+    result = llm.chat_json(_BUSINESS_CONTEXT_SYSTEM, user, _BUSINESS_CONTEXT_SCHEMA,
+                            max_tokens=512)
+    sentence = result.get("sentence", "").strip()
+    if not sentence:
+        return draft
+
+    new_draft = dict(draft)
+    paras = (new_draft.get("disclosure") or "").split("\n\n")
+    if paras:
+        paras[0] = paras[0].rstrip() + " " + sentence
+    new_draft["disclosure"] = "\n\n".join(paras)
+    new_draft["facts_used"] = list(draft.get("facts_used") or []) + [{
+        "fact": sentence,
+        "source_quote": note,
+        "source": "business_context",
+        "verified": None,  # not applicable -- not a contract citation
+    }]
+    new_draft["_business_context_note"] = note
+    new_draft["_forward_looking_statements"] = _FORWARD_LOOKING_STATEMENTS
+    new_draft["_compliance"] = _compliance_flags(item, new_draft["disclosure"])
+    return new_draft

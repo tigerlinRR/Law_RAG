@@ -590,7 +590,55 @@ function renderDraftInto(r, report, meta) {
   const p = el("div", "panel");
   p.appendChild(el("h3", null, "Disclosure (draft)"));
   p.appendChild(el("div", "summary", r.disclosure || ""));
+  if (r._forward_looking_statements) {
+    p.appendChild(el("p", "auto-note",
+      "Includes a Forward-Looking Statements legend in the exported filing, because " +
+      "this disclosure contains forward-looking language."));
+  }
   report.appendChild(p);
+
+  if (meta && meta.id != null) {
+    const bcPanel = el("div", "panel");
+    bcPanel.appendChild(el("h3", null, "Business / strategic context (optional)"));
+    bcPanel.appendChild(el("p", "auto-note",
+      "Not extracted from the contract. Real 8-Ks sometimes add a sentence about why a " +
+      "transaction matters to the Company's plans (e.g. “the Company intends to " +
+      "utilize the Property as a strategic … facility…”) — that kind " +
+      "of business context never appears in the underlying contract, so only legal or " +
+      "management can supply it. Describe it below to add that sentence; the required " +
+      "Forward-Looking Statements legend will be attached automatically."));
+    const ta = el("textarea", "bc-input");
+    ta.rows = 3;
+    ta.placeholder = "e.g. This facility will support the Company's robotics R&D and manufacturing expansion.";
+    ta.value = r._business_context_note || "";
+    bcPanel.appendChild(ta);
+    const btnRow = el("div", "bc-actions");
+    const btn = el("button", "btn-secondary", r._business_context_note ? "Update draft" : "Add to draft");
+    const bcStatus = el("span", "auto-note", "");
+    btn.addEventListener("click", async () => {
+      if (!ta.value.trim()) return;
+      btn.disabled = true;
+      bcStatus.textContent = "Updating…";
+      try {
+        const res = await fetch(`/api/generations/${meta.id}/business-context`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ note: ta.value }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "failed");
+        report.innerHTML = "";
+        renderDraftInto(data.result, report, meta);
+      } catch (err) {
+        bcStatus.textContent = "Failed: " + err.message;
+        btn.disabled = false;
+      }
+    });
+    btnRow.appendChild(btn);
+    btnRow.appendChild(bcStatus);
+    bcPanel.appendChild(btnRow);
+    report.appendChild(bcPanel);
+  }
 
   if (r._compliance && r._compliance.length) {
     const cp = el("div", "panel");
@@ -623,7 +671,9 @@ function renderDraftInto(r, report, meta) {
       const tr = el("tr");
       tr.appendChild(el("td", null, f.fact || ""));
       const q = el("td", "quote");
-      if (f.verified === false) {
+      if (f.source === "business_context") {
+        q.appendChild(el("span", "bc-flag", "Business input (not a contract citation) — "));
+      } else if (f.verified === false) {
         q.appendChild(el("span", "warn-flag", "⚠ UNVERIFIED — "));
       }
       q.appendChild(document.createTextNode(f.source_quote || ""));
