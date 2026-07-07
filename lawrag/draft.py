@@ -470,56 +470,88 @@ def draft_8k(
 
 _BUSINESS_CONTEXT_SCHEMA = {
     "type": "object",
-    "properties": {"sentence": {"type": "string"}},
-    "required": ["sentence"],
+    "properties": {"paragraph": {"type": "string"}, "added_text": {"type": "string"}},
+    "required": ["paragraph", "added_text"],
 }
 
 _BUSINESS_CONTEXT_SYSTEM = (
     "You are a securities lawyer editing an SEC Form 8-K Item disclosure. Legal or "
     "management has supplied a business-context note explaining the strategic "
     "purpose of this transaction -- something true but not stated anywhere in the "
-    "underlying contract (e.g. why an asset matters to the Company's plans). Write "
-    "ONE additional sentence, in the same neutral, factual tone as the rest of the "
-    "disclosure, that states this business context. Do not add anything beyond "
-    "what the note says, do not invent detail, and do not use promotional or "
-    "puffery language."
+    "underlying contract (e.g. why an asset matters to the Company's plans).\n\n"
+    "You are given the disclosure's opening paragraph. Rewrite it to weave in this "
+    "business context, the way a real 8-K does -- typically one to two sentences, "
+    "placed at the most natural point (often right after describing the asset/"
+    "subject matter of the transaction, before the financial/closing terms), not "
+    "tacked onto the end. Do NOT write a separate bolted-on sentence at the end "
+    "unless that is genuinely the most natural place for it.\n\n"
+    "CRITICAL: every existing fact, name, date, amount, and defined term in the "
+    "paragraph below MUST remain, unchanged, in your rewrite -- you are ONLY "
+    "inserting the business-context material, never removing, shortening, or "
+    "rephrasing the existing facts. Keep the same neutral, factual tone. Do not "
+    "add anything beyond what the note says, do not invent detail, and do not use "
+    "promotional or puffery language.\n\n"
+    "Return 'paragraph' (the full rewritten paragraph) and 'added_text' (just the "
+    "new sentence(s) you inserted, verbatim as they appear in 'paragraph')."
 )
+
+_NUMERIC_TOKEN_RE = re.compile(r"\d[\d,.]*\d|\d")
+
+
+def _preserves_facts(original: str, revised: str) -> bool:
+    """Cheap, reliable safety check: every number that appeared in the original
+    paragraph (prices, dates, quantities -- the things a rewrite must never lose or
+    alter) must still appear in the revised one. Doesn't guarantee wording is
+    untouched, but reliably catches the failure mode that matters: a dropped or
+    silently-changed figure in an SEC filing."""
+    orig_nums = set(_NUMERIC_TOKEN_RE.findall(original))
+    revised_nums = set(_NUMERIC_TOKEN_RE.findall(revised))
+    return orig_nums.issubset(revised_nums)
 
 
 def add_business_context(draft: dict, note: str) -> dict:
-    """Add a sentence describing the transaction's business/strategic purpose, from
-    a note supplied by a human reviewer (legal or management) -- NOT extracted from
-    the contract, because this kind of forward-looking narrative (e.g. Richtech's
-    real "the Company intends to utilize the Property as a strategic ... facility")
-    is routinely present in real filings but never appears in the underlying
-    contract, so no document-grounded extraction can produce it. Clearly attributes
-    the added sentence to the reviewer's own input (not a contract citation) and
-    correctly triggers the Forward-Looking Statements legend, since this is exactly
-    the kind of language that requires it.
+    """Merge business/strategic-purpose context into the disclosure, from a note
+    supplied by a human reviewer (legal or management) -- NOT extracted from the
+    contract, because this kind of forward-looking narrative (e.g. Richtech's real
+    "the Company intends to utilize the Property as a strategic ... facility") is
+    routinely present in real filings but never appears in the underlying contract,
+    so no document-grounded extraction can produce it. Integrates it naturally (one
+    to a few sentences at the appropriate point, not bolted onto the end) while
+    verifying every existing fact survives the rewrite untouched; falls back to a
+    plain append if that check fails, so a filing can never silently lose a fact.
+    Clearly attributes the added text to the reviewer's own input (not a contract
+    citation) and correctly triggers the Forward-Looking Statements legend.
 
     Returns a NEW draft dict; does not mutate `draft`."""
     note = (note or "").strip()
     if not note:
         return draft
     item = draft.get("item", "")
+    paras = (draft.get("disclosure") or "").split("\n\n")
+    if not paras:
+        return draft
+    opening = paras[0]
     user = (
-        f"=== EXISTING ITEM {item} DISCLOSURE ===\n{draft.get('disclosure', '')}\n\n"
+        f"=== OPENING PARAGRAPH OF THE ITEM {item} DISCLOSURE ===\n{opening}\n\n"
         f"=== BUSINESS CONTEXT NOTE FROM LEGAL/MANAGEMENT (not from the contract) ===\n"
-        f"{note}\n\nWrite the one sentence to add."
+        f"{note}"
     )
     result = llm.chat_json(_BUSINESS_CONTEXT_SYSTEM, user, _BUSINESS_CONTEXT_SCHEMA,
-                            max_tokens=512)
-    sentence = result.get("sentence", "").strip()
-    if not sentence:
+                            max_tokens=800)
+    revised = (result.get("paragraph") or "").strip()
+    added_text = (result.get("added_text") or "").strip()
+    if not revised or not added_text:
         return draft
+    if _preserves_facts(opening, revised):
+        paras[0] = revised
+    else:
+        # Rewrite dropped/changed a figure -- don't risk it silently; append instead.
+        paras[0] = opening.rstrip() + " " + added_text
 
     new_draft = dict(draft)
-    paras = (new_draft.get("disclosure") or "").split("\n\n")
-    if paras:
-        paras[0] = paras[0].rstrip() + " " + sentence
     new_draft["disclosure"] = "\n\n".join(paras)
     new_draft["facts_used"] = list(draft.get("facts_used") or []) + [{
-        "fact": sentence,
+        "fact": added_text,
         "source_quote": note,
         "source": "business_context",
         "verified": None,  # not applicable -- not a contract citation

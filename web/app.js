@@ -585,6 +585,30 @@ function renderDraftInto(r, report, meta) {
     bar2.appendChild(mk("Word (.docx)", "review-word"));
     bar2.appendChild(mk("PDF", "review-pdf"));
     report.appendChild(bar2);
+
+    const pv = el("div", "panel");
+    const pvHead = el("div", "preview-head");
+    pvHead.appendChild(el("h3", null, "Preview"));
+    const pvToggle = el("div", "preview-toggle");
+    const btnFiling = el("button", "btn-ghost active", "8-K filing");
+    const btnReview = el("button", "btn-ghost", "Review pack");
+    pvToggle.appendChild(btnFiling);
+    pvToggle.appendChild(btnReview);
+    pvHead.appendChild(pvToggle);
+    pv.appendChild(pvHead);
+    const frame = el("iframe", "pdf-preview");
+    const bust = () => `?v=${Date.now()}`;
+    frame.src = `/api/generations/${meta.id}/preview/pdf${bust()}`;
+    pv.appendChild(frame);
+    btnFiling.addEventListener("click", () => {
+      btnFiling.classList.add("active"); btnReview.classList.remove("active");
+      frame.src = `/api/generations/${meta.id}/preview/pdf${bust()}`;
+    });
+    btnReview.addEventListener("click", () => {
+      btnReview.classList.add("active"); btnFiling.classList.remove("active");
+      frame.src = `/api/generations/${meta.id}/preview/review-pdf${bust()}`;
+    });
+    report.appendChild(pv);
   }
 
   const p = el("div", "panel");

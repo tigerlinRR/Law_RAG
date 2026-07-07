@@ -237,15 +237,31 @@ Richtech's own real filings:**
     on its own will rarely trigger this legend (correctly — it isn't inventing
     strategy it wasn't given). Instead, the **web UI has a "Business / strategic
     context" box** on every draft (Generate 8-K and History) where legal or
-    management can describe that context in a sentence; `draft.add_business_context`
-    turns it into one disclosure sentence, attaches it to the draft clearly marked
-    as reviewer-supplied (not a contract citation, shown separately in the
-    fact→source trace), and adds the legend. `POST /api/generations/{id}/
+    management can describe that context in a sentence or two; `draft.
+    add_business_context` merges it into the disclosure's opening paragraph at the
+    natural position (typically right after the asset/subject-matter description,
+    before the financial/closing terms — the same spot real filings put it),
+    rather than bolting a sentence onto the end. Every existing fact, figure, and
+    defined term in that paragraph is checked to confirm it survived the rewrite
+    unchanged (`_preserves_facts`); if the check fails, it falls back to a plain
+    append instead of risking a silently altered figure. The added text is
+    attached to the draft clearly marked as reviewer-supplied (not a contract
+    citation, shown separately in the fact→source trace), and the Forward-Looking
+    Statements legend is added automatically. `POST /api/generations/{id}/
     business-context` persists the update to that same History record.
 
 Downloaded filenames are named after the contract's actual event date, not the
 internal generation id, e.g. `2025-08-21 - 8-K Draft.docx` / `2025-08-21 - 8-K
 Draft - Review.pdf`.
+
+**Live preview.** Every draft (Generate 8-K and History) embeds the actual
+rendered PDF inline — the real cover page, Item text, exhibit index, and
+signature block, not just the plain disclosure text shown above it — with a
+toggle between the 8-K filing and the review pack. Served from `/api/
+generations/{id}/preview/pdf` and `/preview/review-pdf` (same PDFs as the
+`/export/...` downloads, just without the `attachment` disposition so the
+browser renders them instead of downloading), so what a reviewer sees is
+exactly what they would get from the download buttons.
 
 Started with **Item 1.01 (Entry into a Material Definitive Agreement)**: the most
 common trigger, most template-able disclosure, and its inputs (parties, term,
