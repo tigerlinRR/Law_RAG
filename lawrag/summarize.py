@@ -83,7 +83,14 @@ def _user_prompt(text: str, checklist: list[str]) -> str:
 
 
 def _extract_pass(text: str, checklist: list[str]) -> dict:
-    return llm.chat_json(_SYSTEM, _user_prompt(text, checklist), REVIEW_SCHEMA)
+    # One clause object (name/value/quote) per checklist item, so a longer
+    # checklist (e.g. Item 1.01's 23-field one) needs proportionally more
+    # output budget -- 4096 was tuned for the 14-item default checklist and
+    # truncates mid-JSON on larger ones, especially with long verbatim quotes
+    # (e.g. redacted contract text).
+    max_tokens = min(12000, 4096 + 350 * max(0, len(checklist) - 14))
+    return llm.chat_json(_SYSTEM, _user_prompt(text, checklist), REVIEW_SCHEMA,
+                          max_tokens=max_tokens)
 
 
 def _merge(partials: list[dict], checklist: list[str]) -> dict:
