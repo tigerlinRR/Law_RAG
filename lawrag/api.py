@@ -457,8 +457,19 @@ def api_delete_user(username: str, user: dict = Depends(require_admin)) -> dict:
 
 
 @app.get("/")
-def index() -> FileResponse:
-    return FileResponse(WEB / "index.html")
+def index() -> Response:
+    # Inject a cache-busting version (based on each asset's mtime) onto the CSS/JS
+    # URLs so a browser always fetches the current file after a deploy, instead of
+    # serving a stale cached copy — which otherwise makes layout/JS edits silently
+    # not appear until a manual hard-refresh.
+    html = (WEB / "index.html").read_text()
+    for asset in ("style.css", "app.js"):
+        try:
+            v = int((WEB / asset).stat().st_mtime)
+        except OSError:
+            continue
+        html = html.replace(f"/static/{asset}", f"/static/{asset}?v={v}")
+    return Response(content=html, media_type="text/html")
 
 
 app.mount("/static", StaticFiles(directory=WEB), name="static")

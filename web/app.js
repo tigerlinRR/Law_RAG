@@ -585,30 +585,6 @@ function renderDraftInto(r, report, meta) {
     bar2.appendChild(mk("Word (.docx)", "review-word"));
     bar2.appendChild(mk("PDF", "review-pdf"));
     report.appendChild(bar2);
-
-    const pv = el("div", "panel");
-    const pvHead = el("div", "preview-head");
-    pvHead.appendChild(el("h3", null, "Preview"));
-    const pvToggle = el("div", "preview-toggle");
-    const btnFiling = el("button", "btn-ghost active", "8-K filing");
-    const btnReview = el("button", "btn-ghost", "Review pack");
-    pvToggle.appendChild(btnFiling);
-    pvToggle.appendChild(btnReview);
-    pvHead.appendChild(pvToggle);
-    pv.appendChild(pvHead);
-    const frame = el("iframe", "pdf-preview");
-    const bust = () => `?v=${Date.now()}`;
-    frame.src = `/api/generations/${meta.id}/preview/pdf${bust()}`;
-    pv.appendChild(frame);
-    btnFiling.addEventListener("click", () => {
-      btnFiling.classList.add("active"); btnReview.classList.remove("active");
-      frame.src = `/api/generations/${meta.id}/preview/pdf${bust()}`;
-    });
-    btnReview.addEventListener("click", () => {
-      btnReview.classList.add("active"); btnFiling.classList.remove("active");
-      frame.src = `/api/generations/${meta.id}/preview/review-pdf${bust()}`;
-    });
-    report.appendChild(pv);
   }
 
   const p = el("div", "panel");
@@ -629,10 +605,11 @@ function renderDraftInto(r, report, meta) {
       "transaction matters to the Company's plans (e.g. “the Company intends to " +
       "utilize the Property as a strategic … facility…”) — that kind " +
       "of business context never appears in the underlying contract, so only legal or " +
-      "management can supply it. Describe it below to add that sentence; the required " +
-      "Forward-Looking Statements legend will be attached automatically."));
+      "management can supply it. Describe it below and it will be woven into the " +
+      "disclosure at the right spot; the required Forward-Looking Statements legend " +
+      "is attached automatically."));
     const ta = el("textarea", "bc-input");
-    ta.rows = 3;
+    ta.rows = 4;
     ta.placeholder = "e.g. This facility will support the Company's robotics R&D and manufacturing expansion.";
     ta.value = r._business_context_note || "";
     bcPanel.appendChild(ta);
@@ -662,6 +639,33 @@ function renderDraftInto(r, report, meta) {
     btnRow.appendChild(bcStatus);
     bcPanel.appendChild(btnRow);
     report.appendChild(bcPanel);
+
+    // Inline PDF preview — placed after the editable text/context so those stay
+    // reachable, and the large rendered view sits below them.
+    const pv = el("div", "panel");
+    const pvHead = el("div", "preview-head");
+    pvHead.appendChild(el("h3", null, "Preview — exactly what the file contains"));
+    const pvToggle = el("div", "preview-toggle");
+    const btnFiling = el("button", "btn-ghost active", "8-K filing");
+    const btnReview = el("button", "btn-ghost", "Review pack");
+    pvToggle.appendChild(btnFiling);
+    pvToggle.appendChild(btnReview);
+    pvHead.appendChild(pvToggle);
+    pv.appendChild(pvHead);
+    const frame = el("iframe", "pdf-preview");
+    frame.title = "8-K PDF preview";
+    const bust = () => `?v=${Date.now()}`;
+    frame.src = `/api/generations/${meta.id}/preview/pdf${bust()}`;
+    pv.appendChild(frame);
+    btnFiling.addEventListener("click", () => {
+      btnFiling.classList.add("active"); btnReview.classList.remove("active");
+      frame.src = `/api/generations/${meta.id}/preview/pdf${bust()}`;
+    });
+    btnReview.addEventListener("click", () => {
+      btnReview.classList.add("active"); btnFiling.classList.remove("active");
+      frame.src = `/api/generations/${meta.id}/preview/review-pdf${bust()}`;
+    });
+    report.appendChild(pv);
   }
 
   if (r._compliance && r._compliance.length) {
