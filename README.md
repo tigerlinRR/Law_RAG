@@ -261,7 +261,16 @@ toggle between the 8-K filing and the review pack. Served from `/api/
 generations/{id}/preview/pdf` and `/preview/review-pdf` (same PDFs as the
 `/export/...` downloads, just without the `attachment` disposition so the
 browser renders them instead of downloading), so what a reviewer sees is
-exactly what they would get from the download buttons.
+exactly what they would get from the download buttons. The preview breaks out
+of the normal content column to a wide, tall view (up to ~1500px / 90vh) and
+has an **Open in new tab** link for a full-window read, so a full-page 8-K is
+legible rather than squeezed. The editable disclosure text and business-context
+box sit above it, so they stay reachable without scrolling past the preview.
+
+Every generated draft is re-accessible from the **History** tab (persisted in
+the `generations` table, client-scoped), and each row has a **Delete** button to
+prune drafts you no longer need (`DELETE /api/generations/{id}`, scoped to what
+the caller can already see, so a user can only delete their own).
 
 Started with **Item 1.01 (Entry into a Material Definitive Agreement)**: the most
 common trigger, most template-able disclosure, and its inputs (parties, term,

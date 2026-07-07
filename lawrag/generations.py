@@ -62,6 +62,17 @@ def update_result(gen_id: int, result: dict) -> None:
         conn.commit()
 
 
+def delete(gen_id: int, allowed_clients: list[str] | None) -> bool:
+    """Delete a generation, scoped to the caller's allowed clients (same ethical
+    wall as get/list). Returns False if it doesn't exist or is out of scope."""
+    if get(gen_id, allowed_clients) is None:
+        return False
+    with db.connect() as conn, conn.cursor() as cur:
+        cur.execute("DELETE FROM generations WHERE id=%s", (gen_id,))
+        conn.commit()
+    return True
+
+
 def get(gen_id: int, allowed_clients: list[str] | None) -> dict | None:
     """Returns None if not found OR outside the caller's allowed clients."""
     with db.connect() as conn, conn.cursor() as cur:

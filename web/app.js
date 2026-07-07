@@ -525,7 +525,7 @@ function renderHistoryList(items) {
   const panel = el("div", "panel");
   const table = el("table", "clauses");
   table.innerHTML = "<thead><tr><th>Date</th><th>Type</th><th>Source</th>"
-    + "<th>Item</th><th>Client</th></tr></thead>";
+    + "<th>Item</th><th>Client</th><th></th></tr></thead>";
   const tb = el("tbody");
   items.forEach((g) => {
     const tr = el("tr", "hist-row");
@@ -534,6 +534,21 @@ function renderHistoryList(items) {
     tr.appendChild(el("td", null, g.source_name || "—"));
     tr.appendChild(el("td", null, g.item || "—"));
     tr.appendChild(el("td", null, g.client || "—"));
+    const actionTd = el("td", "hist-actions");
+    const del = el("button", "row-del", "Delete");
+    del.title = "Remove this draft from History";
+    del.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      if (!confirm("Delete this generated draft from History? This can't be undone.")) return;
+      del.disabled = true;
+      try {
+        const res = await fetch(`/api/generations/${g.id}`, { method: "DELETE" });
+        if (!res.ok) throw new Error((await res.json()).detail || "failed");
+        loadHistory();
+      } catch (err) { del.disabled = false; alert("Delete failed: " + err.message); }
+    });
+    actionTd.appendChild(del);
+    tr.appendChild(actionTd);
     tr.addEventListener("click", () => loadHistoryDetail(g.id));
     tb.appendChild(tr);
   });
@@ -641,30 +656,39 @@ function renderDraftInto(r, report, meta) {
     report.appendChild(bcPanel);
 
     // Inline PDF preview — placed after the editable text/context so those stay
-    // reachable, and the large rendered view sits below them.
-    const pv = el("div", "panel");
+    // reachable, and the large rendered view sits below them. The panel breaks out
+    // of the narrow content column to a wide view (see .preview-panel in CSS).
+    const pv = el("div", "panel preview-panel");
     const pvHead = el("div", "preview-head");
     pvHead.appendChild(el("h3", null, "Preview — exactly what the file contains"));
     const pvToggle = el("div", "preview-toggle");
     const btnFiling = el("button", "btn-ghost active", "8-K filing");
     const btnReview = el("button", "btn-ghost", "Review pack");
+    const openTab = el("a", "btn-ghost", "Open in new tab ↗");
+    openTab.target = "_blank"; openTab.rel = "noopener";
     pvToggle.appendChild(btnFiling);
     pvToggle.appendChild(btnReview);
+    pvToggle.appendChild(openTab);
     pvHead.appendChild(pvToggle);
     pv.appendChild(pvHead);
     const frame = el("iframe", "pdf-preview");
     frame.title = "8-K PDF preview";
     const bust = () => `?v=${Date.now()}`;
-    frame.src = `/api/generations/${meta.id}/preview/pdf${bust()}`;
-    pv.appendChild(frame);
+    let previewPath = "pdf";
+    const show = (path) => {
+      previewPath = path;
+      const url = `/api/generations/${meta.id}/preview/${path}${bust()}`;
+      frame.src = url;
+      openTab.href = url;
+    };
+    show("pdf");
     btnFiling.addEventListener("click", () => {
-      btnFiling.classList.add("active"); btnReview.classList.remove("active");
-      frame.src = `/api/generations/${meta.id}/preview/pdf${bust()}`;
+      btnFiling.classList.add("active"); btnReview.classList.remove("active"); show("pdf");
     });
     btnReview.addEventListener("click", () => {
-      btnReview.classList.add("active"); btnFiling.classList.remove("active");
-      frame.src = `/api/generations/${meta.id}/preview/review-pdf${bust()}`;
+      btnReview.classList.add("active"); btnFiling.classList.remove("active"); show("review-pdf");
     });
+    pv.appendChild(frame);
     report.appendChild(pv);
   }
 

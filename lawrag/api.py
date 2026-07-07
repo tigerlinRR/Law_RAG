@@ -380,6 +380,16 @@ def export_review_pdf(gen_id: int, user: dict = Depends(current_user)) -> Stream
         "Content-Disposition": f'attachment; filename="{name}"'})
 
 
+@app.delete("/api/generations/{gen_id}")
+def delete_generation(gen_id: int, user: dict = Depends(current_user)) -> dict:
+    """Remove a generated draft from History. Client-scoped like every other
+    generation endpoint, so a user can only delete what they can already see."""
+    if not generations.delete(gen_id, user["allowed_clients"]):
+        raise HTTPException(status_code=404, detail="not found")
+    auth.log(user["username"], "delete_generation", str(gen_id))
+    return {"ok": True}
+
+
 # Same PDFs as /export/pdf|review-pdf, but WITHOUT "attachment" so the browser
 # renders them inline (e.g. in an <iframe>) instead of downloading — lets a
 # reviewer see exactly what the real document looks like before deciding to

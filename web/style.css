@@ -245,15 +245,29 @@ table.clauses td.quote .warn-flag { color: var(--risk); font-style: normal; font
 .bc-actions { display: flex; align-items: center; gap: 10px; }
 table.clauses td.quote .bc-flag { color: var(--accent-dk); font-style: normal; font-weight: 600; }
 
+/* The preview panel breaks out of the 980px content column to a wide view so the
+   full-page 8-K is big and readable, not squeezed into the narrow column. */
+.preview-panel {
+  width: min(96vw, 1500px);
+  position: relative; left: 50%; transform: translateX(-50%);
+}
 .preview-head { display: flex; align-items: center; justify-content: space-between;
   gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
-.preview-toggle { display: flex; gap: 8px; }
+.preview-toggle { display: flex; gap: 8px; align-items: center; }
 .preview-toggle .btn-ghost { padding: 5px 12px; font-size: 12.5px; }
 .preview-toggle .btn-ghost.active { background: var(--ink); color: #fff; border-color: var(--ink); }
 .pdf-preview {
-  display: block; width: 100%; height: 78vh; min-height: 620px;
+  display: block; width: 100%; height: 90vh; min-height: 760px;
   border: 1px solid var(--line); border-radius: 8px; background: #525659;
 }
+.hist-actions { width: 1%; white-space: nowrap; text-align: right; }
+.row-del {
+  font-family: var(--sans); font-size: 12px; font-weight: 600; color: var(--risk);
+  background: transparent; border: 1px solid #e6ccc9; border-radius: 6px;
+  padding: 4px 10px; cursor: pointer; transition: .15s;
+}
+.row-del:hover { background: var(--risk-bg); border-color: var(--risk); }
+.row-del:disabled { opacity: .5; cursor: default; }
 .det { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
        box-shadow: var(--shadow); margin-bottom: 12px; padding: 4px 6px; }
 .det > summary { cursor: pointer; font-family: var(--serif); font-size: 16px; font-weight: 700;
