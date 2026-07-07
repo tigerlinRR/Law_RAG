@@ -9,9 +9,12 @@ Input `reviews` is a list of the dicts returned by summarize.review_contract().
 from __future__ import annotations
 
 import io
+import re
 
 import docx
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
@@ -138,7 +141,6 @@ def _report_date(draft: dict) -> str:
     """The 8-K 'date of earliest event reported' — the transaction date, which
     is almost always the first date stated in the disclosure ('On <date>, ...
     entered into ...'). Fall back to any date in the cited facts."""
-    import re
     m = re.search(r"\b([A-Z][a-z]+ \d{1,2}, \d{4})\b", draft.get("disclosure", ""))
     if m:
         return m.group(1)
@@ -170,6 +172,42 @@ def _disclosure_paragraphs(draft: dict) -> list[str]:
     return paras
 
 
+def _rule_para(doc, before=0, after=8):
+    """A thick horizontal rule (EDGAR brackets each page's content top and bottom)."""
+    from docx.shared import Pt
+    p = doc.add_paragraph()
+    p.paragraph_format.space_before = Pt(before)
+    p.paragraph_format.space_after = Pt(after)
+    pPr = p._p.get_or_add_pPr()
+    pbdr = OxmlElement("w:pBdr")
+    bottom = OxmlElement("w:bottom")
+    bottom.set(qn("w:val"), "single")
+    bottom.set(qn("w:sz"), "18")
+    bottom.set(qn("w:space"), "1")
+    bottom.set(qn("w:color"), "000000")
+    pbdr.append(bottom)
+    pPr.append(pbdr)
+    return p
+
+
+def _body_para(doc, text: str, *, justify=True, indent=True, bold_terms=True):
+    """A justified, first-line-indented body paragraph with defined terms bolded,
+    matching the real filing's Item text."""
+    from docx.shared import Inches
+    p = doc.add_paragraph()
+    if justify:
+        p.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    if indent:
+        p.paragraph_format.first_line_indent = Inches(0.4)
+    if bold_terms:
+        for seg, is_bold in _bold_segments(text):
+            run = p.add_run(seg)
+            run.bold = is_bold
+    else:
+        p.add_run(text)
+    return p
+
+
 def draft_to_word(draft: dict) -> bytes:
     from docx.shared import Inches, Pt
     r = REGISTRANT
@@ -179,6 +217,7 @@ def draft_to_word(draft: dict) -> bytes:
     # Compact spacing + modest margins so the whole cover page fits on ONE page,
     # like a real filing (spacers pushed it onto a second page otherwise).
     normal = doc.styles["Normal"]
+    normal.font.name = "Times New Roman"  # match the real filing's serif face
     normal.font.size = Pt(10)
     normal.paragraph_format.space_after = Pt(2)
     normal.paragraph_format.space_before = Pt(0)
@@ -198,22 +237,26 @@ def draft_to_word(draft: dict) -> bytes:
             run.font.size = Pt(size)
         return p
 
+    _rule_para(doc, after=8)
     centered("UNITED STATES", bold=True)
     centered("SECURITIES AND EXCHANGE COMMISSION", bold=True)
     centered("Washington, D.C. 20549", bold=True)
     centered("FORM 8-K", bold=True, size=14, gap_before=7)
     centered("CURRENT REPORT", bold=True, gap_before=7)
-    centered("Pursuant to Section 13 or 15(d) of the", bold=True)
-    centered("Securities Exchange Act of 1934", bold=True)
+    centered("PURSUANT TO SECTION 13 OR 15(d) OF THE", bold=True)
+    centered("SECURITIES EXCHANGE ACT OF 1934", bold=True)
     centered(f"Date of Report (Date of earliest event reported): {date}", gap_before=7)
     centered(r["name"], bold=True, gap_before=7)
     centered("(Exact name of registrant as specified in its charter)")
 
+    # Registrant id: values underlined (bottom border), labels below — no grid box.
     t = doc.add_table(rows=2, cols=3)
-    t.style = "Table Grid"
+    _no_table_borders(t)
     for i, v in enumerate([r["state"], r["file_number"], r["irs_ein"]]):
-        t.rows[0].cells[i].paragraphs[0].add_run(v).bold = True
-        t.rows[0].cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        cell = t.rows[0].cells[i]
+        cell.paragraphs[0].add_run(v).bold = True
+        cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        _cell_borders(cell, bottom=True)
     for i, v in enumerate(["(State or other jurisdiction of incorporation)",
                             "(Commission File Number)", "(IRS Employer Identification No.)"]):
         p = t.rows[1].cells[i].paragraphs[0]
@@ -227,10 +270,10 @@ def draft_to_word(draft: dict) -> bytes:
     centered("Not Applicable", bold=True, gap_before=5)
     centered("(Former name or former address, if changed since last report)")
 
-    intro = doc.add_paragraph(
+    intro = _body_para(doc,
         "Check the appropriate box below if the Form 8-K filing is intended to "
         "simultaneously satisfy the filing obligation of the registrant under any of "
-        "the following provisions:")
+        "the following provisions:", bold_terms=False)
     intro.paragraph_format.space_before = Pt(6)
     doc.add_paragraph("☐  Written communications pursuant to Rule 425 under the Securities Act (17 CFR 230.425)")
     doc.add_paragraph("☐  Soliciting material pursuant to Rule 14a-12 under the Exchange Act (17 CFR 240.14a-12)")
@@ -238,57 +281,76 @@ def draft_to_word(draft: dict) -> bytes:
     doc.add_paragraph("☐  Pre-commencement communications pursuant to Rule 13e-4(c) under the Exchange Act (17 CFR 240.13e-4(c))")
 
     centered("Securities registered pursuant to Section 12(b) of the Act:", gap_before=5)
+    # Securities table: underlined header (top+bottom border) + shaded data row, no grid.
     t2 = doc.add_table(rows=1 + len(r["securities"]), cols=3)
-    t2.style = "Table Grid"
+    _no_table_borders(t2)
     for i, h in enumerate(["Title of each class", "Trading Symbol(s)", "Name of each exchange on which registered"]):
-        t2.rows[0].cells[i].paragraphs[0].add_run(h).bold = True
+        cell = t2.rows[0].cells[i]
+        run = cell.paragraphs[0].add_run(h)
+        run.bold = True
+        cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        _cell_borders(cell, top=True, bottom=True)
     for row_i, (cls, sym, exch) in enumerate(r["securities"], start=1):
-        vals = (cls, sym, exch)
-        for i, v in enumerate(vals):
-            t2.rows[row_i].cells[i].text = v
+        for i, v in enumerate((cls, sym, exch)):
+            cell = t2.rows[row_i].cells[i]
+            cell.text = v
+            if i:
+                cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+            _shade_cell(cell)
+            _cell_borders(cell, bottom=True)
 
     egc = "☒" if r["emerging_growth_company"] else "☐"
-    egp = doc.add_paragraph(
+    egp = _body_para(doc,
         "Indicate by check mark whether the registrant is an emerging growth company as "
         "defined in Rule 405 of the Securities Act of 1933 (§230.405 of this chapter) or "
-        "Rule 12b-2 of the Securities Exchange Act of 1934 (§240.12b-2 of this chapter).")
+        "Rule 12b-2 of the Securities Exchange Act of 1934 (§240.12b-2 of this chapter).",
+        bold_terms=False)
     egp.paragraph_format.space_before = Pt(6)
     doc.add_paragraph(f"Emerging growth company {egc}")
-    doc.add_paragraph(
+    _body_para(doc,
         "If an emerging growth company, indicate by check mark if the registrant has "
         "elected not to use the extended transition period for complying with any new or "
         "revised financial accounting standards provided pursuant to Section 13(a) of the "
-        "Exchange Act. ☐")
+        "Exchange Act. ☐", bold_terms=False)
+    _rule_para(doc, before=8, after=0)
 
     doc.add_page_break()
 
+    _rule_para(doc, after=8)
     hdr = doc.add_paragraph()
-    hdr.add_run(f"Item {draft.get('item','')}. {draft.get('item_title','')}").bold = True
+    hdr.add_run(f"Item {draft.get('item','')}. {draft.get('item_title','')}.").bold = True
     for para in _disclosure_paragraphs(draft):
-        p = doc.add_paragraph(para)
-        p.paragraph_format.first_line_indent = docx.shared.Inches(0.4)
+        _body_para(doc, para)
 
     fls = draft.get("_forward_looking_statements")
     if fls:
         fp = doc.add_paragraph()
         fp.paragraph_format.space_before = Pt(6)
         fp.add_run("Forward-Looking Statements").bold = True
-        doc.add_paragraph(fls)
+        _body_para(doc, fls, indent=False, bold_terms=False)
 
     doc.add_paragraph().add_run("Item 9.01. Financial Statements and Exhibits.").bold = True
-    doc.add_paragraph("(d) Exhibits")
+    ital = doc.add_paragraph()
+    ital.add_run("(d) Exhibits").italic = True
+    doc.add_paragraph("The following exhibits are being filed herewith:")
+    # Exhibit index: underlined header, no grid.
     t3 = doc.add_table(rows=3, cols=2)
-    t3.style = "Table Grid"
-    t3.rows[0].cells[0].paragraphs[0].add_run("Exhibit").bold = True
-    t3.rows[0].cells[1].paragraphs[0].add_run("Description").bold = True
+    _no_table_borders(t3)
+    for i, h in enumerate(["Exhibit No.", "Description"]):
+        cell = t3.rows[0].cells[i]
+        cell.paragraphs[0].add_run(h).bold = True
+        _cell_borders(cell, bottom=True)
     t3.rows[1].cells[0].text = "10.1"
     t3.rows[1].cells[1].text = f"{draft.get('_doc_type') or 'Agreement'}, dated {date}"
     t3.rows[2].cells[0].text = "104"
-    t3.rows[2].cells[1].text = "Cover Page Interactive Data File (embedded within the Inline XBRL documents)"
+    t3.rows[2].cells[1].text = "Cover Page Interactive Data File (embedded within the Inline XBRL document)"
+    _rule_para(doc, before=10, after=2)
+    centered("1")
 
     doc.add_page_break()
+    _rule_para(doc, after=8)
     centered("SIGNATURE", bold=True)
-    doc.add_paragraph(
+    _body_para(doc,
         "Pursuant to the requirements of the Securities Exchange Act of 1934, the "
         "registrant has duly caused this report to be signed on its behalf by the "
         "undersigned hereunto duly authorized.")
@@ -304,6 +366,8 @@ def draft_to_word(draft: dict) -> bytes:
     p = doc.add_paragraph(f"Title: {r['signer_title']}")
     p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
     doc.add_paragraph(f"Dated: {date}")
+    _rule_para(doc, before=10, after=2)
+    centered("2")
 
     # NOTE: the filing document ends here — no review/QC material is mixed in, so
     # this file is the clean 8-K ready for counsel to finalize. The review pack
@@ -379,6 +443,76 @@ def _esc(s: str) -> str:
     return (s or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
+# Real 8-K filings set off a newly-defined term in bold the first time it appears,
+# e.g. (the "Company"), ("Purchase and Sale Agreement"), (the "Earnest Money").
+# We bold ONLY quoted terms that sit inside a parenthetical, matching that
+# convention (a later plain "the Company" is not bold, and quoted phrases outside
+# parentheses — like "forward-looking statements" in the FLS legend — are not).
+_PAREN_RE = re.compile(r"\([^)]*\)")
+_QUOTED_RE = re.compile(r"[“\"][^”\"]+[”\"]")
+
+
+def _bold_segments(text: str) -> list[tuple[str, bool]]:
+    """Split `text` into (segment, is_bold) runs, bolding defined terms."""
+    spans: list[tuple[int, int]] = []
+    for pm in _PAREN_RE.finditer(text):
+        for qm in _QUOTED_RE.finditer(pm.group(0)):
+            spans.append((pm.start() + qm.start(), pm.start() + qm.end()))
+    if not spans:
+        return [(text, False)]
+    segs: list[tuple[str, bool]] = []
+    i = 0
+    for s, e in spans:
+        if s > i:
+            segs.append((text[i:s], False))
+        segs.append((text[s:e], True))
+        i = e
+    if i < len(text):
+        segs.append((text[i:], False))
+    return segs
+
+
+def _bold_defined_html(text: str) -> str:
+    """HTML with defined terms bolded (input is raw text; each piece is escaped)."""
+    return "".join(f"<b>{_esc(t)}</b>" if b else _esc(t) for t, b in _bold_segments(text))
+
+
+def _cell_borders(cell, **sides) -> None:
+    """Set individual cell borders (Word). sides e.g. bottom=True, top=True — real
+    8-K tables use underlines (a bottom border), not a full grid box."""
+    tcPr = cell._tc.get_or_add_tcPr()
+    tcB = OxmlElement("w:tcBorders")
+    for side, on in sides.items():
+        if not on:
+            continue
+        el = OxmlElement(f"w:{side}")
+        el.set(qn("w:val"), "single")
+        el.set(qn("w:sz"), "6")
+        el.set(qn("w:color"), "000000")
+        tcB.append(el)
+    tcPr.append(tcB)
+
+
+def _shade_cell(cell, fill: str = "CFE2F3") -> None:
+    tcPr = cell._tc.get_or_add_tcPr()
+    shd = OxmlElement("w:shd")
+    shd.set(qn("w:val"), "clear")
+    shd.set(qn("w:fill"), fill)
+    tcPr.append(shd)
+
+
+def _no_table_borders(table) -> None:
+    """Remove all borders from a table (python-docx default table already has none,
+    but be explicit so no theme grid sneaks in)."""
+    tblPr = table._tbl.tblPr
+    borders = OxmlElement("w:tblBorders")
+    for edge in ("top", "left", "bottom", "right", "insideH", "insideV"):
+        el = OxmlElement(f"w:{edge}")
+        el.set(qn("w:val"), "none")
+        borders.append(el)
+    tblPr.append(borders)
+
+
 def _draft_html(draft: dict) -> str:
     """The clean filing document — cover page, Item disclosure, Item 9.01, and
     signature. NO review/QC material (that lives in _review_html)."""
@@ -386,120 +520,140 @@ def _draft_html(draft: dict) -> str:
     r = REGISTRANT
     date = _report_date(draft)
 
-    disclosure_html = "".join(f"<p>{esc(para)}</p>" for para in _disclosure_paragraphs(draft))
+    disclosure_html = "".join(
+        f"<p class='body'>{_bold_defined_html(para)}</p>" for para in _disclosure_paragraphs(draft))
     fls = draft.get("_forward_looking_statements")
-    fls_html = (f"<h2>Forward-Looking Statements</h2><p style='text-indent:0;'>{esc(fls)}</p>"
-                if fls else "")
+    fls_html = (f"<p class='heading'>Forward-Looking Statements</p>"
+                f"<p class='body' style='text-indent:0;'>{esc(fls)}</p>" if fls else "")
     sec_rows = "".join(
-        f"<tr><td>{esc(cls)}</td><td style='text-align:center'>{esc(sym)}</td>"
-        f"<td style='text-align:center'>{esc(exch)}</td></tr>"
+        f"<tr><td class='left'>{esc(cls)}</td><td>{esc(sym)}</td><td>{esc(exch)}</td></tr>"
         for cls, sym, exch in r["securities"]
     )
     egc = "&#9746;" if r["emerging_growth_company"] else "&#9744;"  # ☒ / ☐
 
     return f"""<!doctype html><html><head><meta charset="utf-8"><style>
-      body {{ font-family: 'Times New Roman', Georgia, serif; color: #000; padding: 12px 30px;
-              font-size: 11.5px; line-height: 1.3; }}
-      .draft-banner {{ text-align: center; font-weight: 700; font-size: 12px; margin-bottom: 12px; }}
+      body {{ font-family: 'Times New Roman', Georgia, serif; color: #000;
+              font-size: 12px; line-height: 1.32; margin: 0; }}
+      .page {{ padding: 0; }}
       .center {{ text-align: center; }}
       .bold {{ font-weight: 700; }}
       .small {{ font-size: 10.5px; }}
-      .cover p {{ margin: 2px 0; }}
-      .cover table {{ width: 100%; border-collapse: collapse; margin: 8px 0; }}
-      .cover table td {{ text-align: center; padding: 3px; vertical-align: top; }}
-      hr {{ border: none; border-top: 2px solid #000; margin: 4px 0 10px; }}
+      /* EDGAR-style thick rule bracketing each page's content, top and bottom. */
+      .pgrule {{ border: none; border-top: 2px solid #000; margin: 0 0 10px; }}
+      .pgrule.bottom {{ margin: 12px 0 0; }}
+      .pageno {{ text-align: center; font-size: 11px; margin-top: 4px; }}
       .pagebreak {{ page-break-before: always; }}
-      .filing p {{ text-indent: 0.4in; margin: 0 0 12px; }}
-      .filing h2 {{ font-size: 13px; margin: 22px 0 4px; }}
-      .sig-block {{ width: 60%; margin-left: auto; margin-top: 30px; }}
-      .sig-block p {{ margin: 4px 0; text-indent: 0; }}
-      table.exhibits, table.review {{ border-collapse: collapse; width: 100%; margin-top: 8px; font-size: 12px; }}
-      table.exhibits td, table.exhibits th, table.review td, table.review th {{
-        border: 1px solid #999; padding: 5px 8px; text-align: left; vertical-align: top; }}
-      table.review th {{ background: #1a2238; color: #fff; }}
-      tr.unverified td {{ color: #b4232a; font-weight: 600; }}
-      .appendix-note {{ color: #555; font-size: 12px; }}
+
+      .cover p {{ margin: 2px 0; text-align: center; }}
+      .cover .gap {{ margin-top: 10px; }}
+      /* Registrant id row: values underlined (bottom border), labels below — no box. */
+      table.cover-id {{ width: 100%; border-collapse: collapse; margin: 8px 0 2px; }}
+      table.cover-id td {{ text-align: center; padding: 2px 8px; vertical-align: top; }}
+      table.cover-id .vals td {{ font-weight: 700; border-bottom: 1px solid #000; }}
+      table.cover-id .labels td {{ font-size: 10.5px; }}
+      /* Securities table: underlined header + shaded data row, no vertical lines. */
+      table.sec {{ width: 100%; border-collapse: collapse; margin: 6px 0; font-size: 11px; }}
+      table.sec th {{ border-top: 1px solid #000; border-bottom: 1px solid #000;
+        font-weight: 700; text-align: center; padding: 4px 6px; }}
+      table.sec td {{ background: #cfe2f3; text-align: center; padding: 4px 6px;
+        border-bottom: 1px solid #000; }}
+      table.sec td.left {{ text-align: left; }}
+      .cover p.boxnote {{ text-indent: 0.4in; margin: 8px 0; text-align: justify; }}
+      .cover p.checkline {{ margin: 5px 0 5px 0.3in; text-align: left; }}
+
+      .heading {{ font-weight: 700; margin: 16px 0 8px; }}
+      p.body {{ text-indent: 0.4in; margin: 0 0 10px; text-align: justify; }}
+      /* Exhibit index: underlined header, no grid. */
+      table.exhibit-idx {{ width: 100%; border-collapse: collapse; margin: 4px 0; }}
+      table.exhibit-idx th {{ border-bottom: 1px solid #000; text-align: left;
+        font-weight: 700; padding: 3px 6px; }}
+      table.exhibit-idx td {{ padding: 3px 6px; vertical-align: top; }}
+      table.exhibit-idx td.exno {{ width: 12%; white-space: nowrap; }}
+      .sig-block {{ width: 62%; margin-left: auto; margin-top: 34px; }}
+      .sig-block p {{ margin: 3px 0; }}
+      .sig-line {{ border-bottom: 1px solid #000; }}
     </style></head><body>
 
-      <div class="cover center">
+      <div class="page cover">
+        <hr class="pgrule">
         <p class="bold">UNITED STATES</p>
         <p class="bold">SECURITIES AND EXCHANGE COMMISSION</p>
         <p class="bold">Washington, D.C. 20549</p>
-        <p class="bold" style="font-size:15px; margin-top:12px;">FORM 8-K</p>
-        <p class="bold" style="margin-top:10px;">CURRENT REPORT</p>
-        <p class="bold">Pursuant to Section 13 or 15(d) of the<br>Securities Exchange Act of 1934</p>
-        <p style="margin-top:10px;">Date of Report (Date of earliest event reported): {esc(date)}</p>
-        <p class="bold" style="margin-top:10px;">{esc(r['name'])}</p>
+        <p class="bold gap" style="font-size:15px;">FORM 8-K</p>
+        <p class="bold gap">CURRENT REPORT</p>
+        <p class="bold gap">PURSUANT TO SECTION 13 OR 15(d) OF THE<br>SECURITIES EXCHANGE ACT OF 1934</p>
+        <p class="gap">Date of Report (Date of earliest event reported): <span class="bold">{esc(date)}</span></p>
+        <p class="bold gap">{esc(r['name'])}</p>
         <p class="small">(Exact name of registrant as specified in its charter)</p>
-        <table>
-          <tr>
-            <td class="bold">{esc(r['state'])}</td>
-            <td class="bold">{esc(r['file_number'])}</td>
-            <td class="bold">{esc(r['irs_ein'])}</td>
-          </tr>
-          <tr>
-            <td class="small">(State or other jurisdiction<br>of incorporation)</td>
-            <td class="small">(Commission File Number)</td>
-            <td class="small">(IRS Employer<br>Identification No.)</td>
-          </tr>
+        <table class="cover-id">
+          <tr class="vals"><td>{esc(r['state'])}</td><td>{esc(r['file_number'])}</td><td>{esc(r['irs_ein'])}</td></tr>
+          <tr class="labels"><td>(State or other jurisdiction<br>of incorporation)</td>
+            <td>(Commission File Number)</td><td>(IRS Employer<br>Identification No.)</td></tr>
         </table>
-        <p class="bold">{"<br>".join(esc(l) for l in r['address'])}</p>
+        <p class="bold gap">{"<br>".join(esc(l) for l in r['address'])}</p>
         <p class="small">(Address of principal executive offices, including zip code)</p>
-        <p style="margin-top:8px;">Registrant's telephone number, including area code: {esc(r['phone'])}</p>
-        <p class="bold" style="margin-top:8px;">Not Applicable</p>
+        <p class="gap">Registrant's telephone number, including area code: <span class="bold">{esc(r['phone'])}</span></p>
+        <p class="bold gap">Not Applicable</p>
         <p class="small">(Former name or former address, if changed since last report)</p>
+
+        <p class="boxnote">Check the appropriate box below if the Form 8-K filing is intended to
+        simultaneously satisfy the filing obligation of the registrant under any of the following provisions:</p>
+        <p class="checkline">&#9744;&nbsp; Written communications pursuant to Rule 425 under the Securities Act (17 CFR 230.425)</p>
+        <p class="checkline">&#9744;&nbsp; Soliciting material pursuant to Rule 14a-12 under the Exchange Act (17 CFR 240.14a-12)</p>
+        <p class="checkline">&#9744;&nbsp; Pre-commencement communications pursuant to Rule 14d-2(b) under the Exchange Act (17 CFR 240.14d-2(b))</p>
+        <p class="checkline">&#9744;&nbsp; Pre-commencement communications pursuant to Rule 13e-4(c) under the Exchange Act (17 CFR 240.13e-4(c))</p>
+
+        <p class="center" style="margin-top:8px;">Securities registered pursuant to Section 12(b) of the Act:</p>
+        <table class="sec">
+          <thead><tr><th>Title of each class</th><th>Trading Symbol(s)</th>
+          <th>Name of each exchange on which registered</th></tr></thead>
+          <tbody>{sec_rows}</tbody>
+        </table>
+
+        <p class="boxnote">Indicate by check mark whether the registrant is an emerging growth company as
+        defined in Rule 405 of the Securities Act of 1933 (&sect;230.405 of this chapter) or Rule 12b-2 of the
+        Securities Exchange Act of 1934 (&sect;240.12b-2 of this chapter).</p>
+        <p class="checkline">Emerging growth company {egc}</p>
+        <p class="boxnote">If an emerging growth company, indicate by check mark if the registrant has elected not
+        to use the extended transition period for complying with any new or revised financial accounting
+        standards provided pursuant to Section 13(a) of the Exchange Act. &#9744;</p>
+        <hr class="pgrule bottom">
       </div>
 
-      <p style="margin-top:10px; text-indent:0.4in;">Check the appropriate box below if the Form 8-K filing is
-      intended to simultaneously satisfy the filing obligation of the registrant under any of the following
-      provisions:</p>
-      <p>&#9744;&nbsp; Written communications pursuant to Rule 425 under the Securities Act (17 CFR 230.425)</p>
-      <p>&#9744;&nbsp; Soliciting material pursuant to Rule 14a-12 under the Exchange Act (17 CFR 240.14a-12)</p>
-      <p>&#9744;&nbsp; Pre-commencement communications pursuant to Rule 14d-2(b) under the Exchange Act (17 CFR 240.14d-2(b))</p>
-      <p>&#9744;&nbsp; Pre-commencement communications pursuant to Rule 13e-4(c) under the Exchange Act (17 CFR 240.13e-4(c))</p>
-
-      <p class="center" style="margin-top:10px;">Securities registered pursuant to Section 12(b) of the Act:</p>
-      <table class="exhibits">
-        <thead><tr><th>Title of each class</th><th>Trading Symbol(s)</th>
-        <th>Name of each exchange on which registered</th></tr></thead>
-        <tbody>{sec_rows}</tbody>
-      </table>
-
-      <p style="margin-top:10px;">Indicate by check mark whether the registrant is an emerging growth company as
-      defined in Rule 405 of the Securities Act of 1933 (&sect;230.405 of this chapter) or Rule 12b-2 of the
-      Securities Exchange Act of 1934 (&sect;240.12b-2 of this chapter).</p>
-      <p>Emerging growth company {egc}</p>
-      <p>If an emerging growth company, indicate by check mark if the registrant has elected not to use the
-      extended transition period for complying with any new or revised financial accounting standards provided
-      pursuant to Section 13(a) of the Exchange Act. &#9744;</p>
-
-      <div class="pagebreak filing">
-        <h2>Item {esc(draft.get('item',''))}. {esc(draft.get('item_title',''))}.</h2>
+      <div class="pagebreak page">
+        <hr class="pgrule">
+        <p class="heading">Item {esc(draft.get('item',''))}. {esc(draft.get('item_title',''))}.</p>
         {disclosure_html}
         {fls_html}
-        <h2>Item 9.01. Financial Statements and Exhibits.</h2>
-        <p style="text-indent:0;">(d) Exhibits</p>
-        <table class="exhibits">
-          <thead><tr><th>Exhibit</th><th>Description</th></tr></thead>
+        <p class="heading">Item 9.01. Financial Statements and Exhibits.</p>
+        <p class="body" style="text-indent:0; font-style:italic; margin-bottom:4px;">(d) Exhibits</p>
+        <p class="body" style="text-indent:0; margin-bottom:4px;">The following exhibits are being filed herewith:</p>
+        <table class="exhibit-idx">
+          <thead><tr><th>Exhibit No.</th><th>Description</th></tr></thead>
           <tbody>
-            <tr><td>10.1</td><td>{esc(draft.get('_doc_type') or 'Agreement')}, dated {esc(date)}</td></tr>
-            <tr><td>104</td><td>Cover Page Interactive Data File (embedded within the Inline XBRL documents)</td></tr>
+            <tr><td class="exno">10.1</td><td>{esc(draft.get('_doc_type') or 'Agreement')}, dated {esc(date)}</td></tr>
+            <tr><td class="exno">104</td><td>Cover Page Interactive Data File (embedded within the Inline XBRL document)</td></tr>
           </tbody>
         </table>
+        <hr class="pgrule bottom">
+        <div class="pageno">1</div>
       </div>
 
-      <div class="pagebreak">
-        <p class="center bold">SIGNATURE</p>
-        <p style="text-indent:0.4in;">Pursuant to the requirements of the Securities Exchange Act of 1934, the
-        registrant has duly caused this report to be signed on its behalf by the undersigned hereunto duly
-        authorized.</p>
+      <div class="pagebreak page">
+        <hr class="pgrule">
+        <p class="center bold" style="margin-bottom:12px;">SIGNATURE</p>
+        <p class="body">Pursuant to the requirements of the Securities Exchange Act of 1934, the registrant has
+        duly caused this report to be signed on its behalf by the undersigned hereunto duly authorized.</p>
         <div class="sig-block">
           <p class="bold">{esc(r['name'])}</p>
-          <p style="margin-top:20px;">By: /s/ {esc(r['signer_name'])} &nbsp; <i>[DRAFT — NOT YET SIGNED]</i></p>
+          <p style="margin-top:24px;"><span class="sig-line">By: /s/ {esc(r['signer_name'])}</span>
+             &nbsp; <i>[DRAFT — NOT YET SIGNED]</i></p>
           <p>Name: {esc(r['signer_name'])}</p>
           <p>Title: {esc(r['signer_title'])}</p>
         </div>
-        <p style="margin-top:20px;">Dated: {esc(date)}</p>
+        <p style="margin-top:24px;">Dated: {esc(date)}</p>
+        <hr class="pgrule bottom">
+        <div class="pageno">2</div>
       </div>
     </body></html>"""
 
