@@ -363,6 +363,20 @@ source document was on hand); they draft the same way once a real document is
 supplied. **Next: a lawyer reviews the drafts** — this stays an experiment
 requiring sign-off, and RAG-grounded, never fine-tuned.
 
+### Experimental: 8-K style adapter (`training/`)
+
+A separate, optional track explores a **LoRA adapter** that teaches an open base
+model (`Qwen3.6-35B-A3B`) 8-K *style, structure, and materiality selectivity* —
+never facts, which always stay RAG-grounded. `training/` is a self-contained
+package meant to run on a proper training GPU (RTX 6000 / 5090), not this host:
+a ~2,174-pair dataset built from **public** EDGAR filings of ~90 companies
+(`{instruction, source document, real Item disclosure}`), a QLoRA training script,
+and an A/B eval (adapter on vs off, on held-out companies). This is the first block
+of a "shared base + one adapter per filing type" design (8-K now; S-8 / 10-K later),
+and it stays gated behind lawyer sign-off like everything else. See
+`training/README.md`. The adapter's value over plain RAG + the materiality rubric is
+still to be validated by that A/B before any scale-up.
+
 ## Layout
 
 ```

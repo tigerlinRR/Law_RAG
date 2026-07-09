@@ -1,0 +1,18 @@
+# QLoRA fine-tuning stack for the 8-K adapter. Install on the RTX 6000 machine
+# (standard x86 + CUDA — unlike the Jetson, these are all normal pip wheels).
+#
+# IMPORTANT: install a torch build that matches the machine's CUDA. For a Blackwell
+# card (RTX 5090 / RTX PRO 6000 Blackwell) use a CUDA 12.8+ build, e.g.:
+#   pip install torch --index-url https://download.pytorch.org/whl/cu128
+# For RTX 6000 Ada (CUDA 12.1+) the default cu121/cu124 wheel is fine.
+# Install torch FIRST, then the rest below.
+
+transformers>=4.46
+peft>=0.13
+trl>=0.12
+datasets>=3.0
+accelerate>=1.0
+bitsandbytes>=0.44        # 4-bit QLoRA; needs a Blackwell-capable build on 5090/PRO 6000 Blackwell
+sentencepiece
+protobuf
+rouge-score               # lightweight eval metric

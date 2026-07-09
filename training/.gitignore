@@ -1,0 +1,8 @@
+# generated on the training machine — do not commit
+.venv/
+corpus/
+adapter-8k/
+_train_out/
+dataset/train.jsonl
+dataset/val.jsonl
+eval_samples.txt
