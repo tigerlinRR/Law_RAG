@@ -65,9 +65,37 @@ exact compliance red line we designed the RAG pipeline to avoid.**
   as a standalone fact source. Also raise max_tokens / add a "summarize-only" constraint
   for plan-type Items (5.02) to stop truncation.
 
+## v3 negative result + fact GUARDRAIL shipped (2026-07-10)
+- **v3 (data-cleaning) trained on the RTX box did NOT beat v2** — aggregate metrics
+  ~flat (number-recall slightly *lower*, output shorter), still fabricated on the clean
+  held-out AAPL 5.02. This **empirically confirms fabrication is structural**, not a
+  data-volume/quality problem. Decision: **v2 (`training/adapter-8k-v2/`) is the final
+  style adapter; no more fidelity training.** Useful negative result — it vindicates
+  "adapter = style, facts = a separate guardrail". See [[guardrail-red-only]].
+- **Fact-fidelity guardrail built + wired in** (`lawrag/guardrail.py`, spec
+  `training/GUARDRAIL_SPEC.md`, tests `tests/test_guardrail.py` 10/10). Normalizes then
+  reconciles every material datum (currency/count/percent/date/party) in a DRAFT against
+  the SOURCE contract. Pure local text — NO DB/embedding/retrieval (orthogonal to the
+  vector stack; "no RAG" ≠ "no fact-check").
+  - **Verdict is RED-only** (spec §4, amended by the spec owner 2026-07-10): RED =
+    fabrication (incl. model-COMPUTED figures, e.g. a $960k OID not stated verbatim) =
+    the only status that blocks. Omission = AMBER = review-only, never blocks, NOT in
+    the verdict. A blanket omission check produced 39 noise flags on a 2.03 note (8-K
+    disclosure is deliberately selective), so AMBER is scoped via `reconcile(...,
+    must_disclose=<keywords>)` to rubric MUST-disclose fields. Default = **RED-only
+    shipped now (Option A)**; **scoped AMBER (Option B) PENDING** the rubric→keyword map.
+  - **Wired**: `draft_8k()` attaches `result["_guardrail"]`; review pack (Word/PDF)
+    renders a "Fact reconciliation" section; web shows a one-line verdict banner
+    (details stay in the downloadable review pack). Verified E2E over HTTP.
+  - `scripts/serve.py` now self-bootstraps `sys.path` — start with
+    `./.venv/bin/python scripts/serve.py` (run via the harness background mechanism, not
+    shell `&`: the sandbox kills shell-backgrounded procs and drops PYTHONPATH).
+
 ## Immediate next steps (recommended order: B, then A)
 - **C — DONE (2026-07-10)** — see the "C — human/legal quality check DONE" section
   above. Bottom line: adapter is a style layer, not a fact source; deploy accordingly.
+- **Guardrail — DONE (2026-07-10)** — RED-only fact reconciliation wired into drafting;
+  scoped AMBER (Option B) is the only follow-up, pending the rubric→keyword mapping.
 - **B — deploy v2 on Thor**: merge (bf16 base + adapter → bf16 merged) on the RTX box
   via `training/llamafactory/merge_8k_v2.yaml`, then re-quantize to NVFP4 with the
   user's own toolchain, serve via vLLM (swap model path), point `.env` `LLM_MODEL`/
