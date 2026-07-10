@@ -9,6 +9,11 @@ legal documents. To let other devices on your private tailnet reach it, set:
 (only do that deliberately, and rely on the tailnet for access control).
 """
 import os
+import sys
+
+# Make the repo root importable so `lawrag` resolves no matter how this script is
+# launched (running `scripts/serve.py` otherwise only puts scripts/ on sys.path).
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import uvicorn
 

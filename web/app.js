@@ -584,6 +584,29 @@ function renderDraftInto(r, report, meta) {
     (meta && meta.created_at ? `  ·  generated ${meta.created_at}` : ""));
   report.appendChild(src);
 
+  // Fact-fidelity verdict — the safety signal. Details live in the Review pack
+  // (kept off-screen deliberately); this one line surfaces the critical status.
+  if (r._guardrail && r._guardrail.verdict) {
+    const g = r._guardrail;
+    const items = g.items || [];
+    const fab = items.filter((i) => i.status === "fabricated").length;
+    const om = items.filter((i) => i.status === "omitted").length;
+    let cls, msg;
+    if (g.verdict === "blocked") {
+      cls = "gr-blocked";
+      msg = `⚠ BLOCKED — ${fab} figure(s) in the draft are NOT grounded in the source ` +
+            `contract. Do not treat as ready. See the Review pack for the list.`;
+    } else if (g.verdict === "needs_review") {
+      cls = "gr-review";
+      msg = `Needs review — ${om} figure(s) in the source are not in the draft ` +
+            `(8-K disclosure is selective; confirm none is material). See the Review pack.`;
+    } else {
+      cls = "gr-clean";
+      msg = "✓ Fact check clean — every figure in the draft is grounded in the source.";
+    }
+    report.appendChild(el("div", "guardrail-banner " + cls, msg));
+  }
+
   if (meta && meta.id != null) {
     const mk = (label, path) => {
       const a = el("a", "btn-ghost", label);

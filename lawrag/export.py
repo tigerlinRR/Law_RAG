@@ -378,6 +378,16 @@ def draft_to_word(draft: dict) -> bytes:
     return buf.getvalue()
 
 
+_GUARDRAIL_VERDICT = {
+    "blocked": "BLOCKED — the draft contains figures not grounded in the source "
+               "contract. Do not treat as ready; resolve every RED item below.",
+    "needs_review": "NEEDS REVIEW — figures present in the source contract are absent "
+                    "from the draft. 8-K disclosure is selective; confirm none of the "
+                    "AMBER omissions below is legally material.",
+    "clean": "CLEAN — every figure in the draft is grounded in the source contract.",
+}
+
+
 def review_to_word(draft: dict) -> bytes:
     """The review pack — a SEPARATE document (never mixed into the filing) that
     lets counsel check the draft: SEC-requirement checks, precedents used, the
@@ -388,6 +398,29 @@ def review_to_word(draft: dict) -> bytes:
         f"Companion to the drafted 8-K for source contract "
         f"{draft.get('_source_contract', '—')}. NOT part of the filing — for "
         "internal review only. Verify every fact below against the source contract.")
+
+    guard = draft.get("_guardrail") or {}
+    if guard.get("items") is not None:
+        verdict = guard.get("verdict", "")
+        doc.add_heading("Fact reconciliation (source grounding)", level=1)
+        doc.add_paragraph(_GUARDRAIL_VERDICT.get(verdict, verdict))
+        gitems = guard.get("items") or []
+        fabricated = [i for i in gitems if i.get("status") == "fabricated"]
+        omitted = [i for i in gitems if i.get("status") == "omitted"]
+        if fabricated:
+            doc.add_paragraph(
+                "RED — figures in the draft NOT found in the source contract "
+                "(likely fabricated; do not file until resolved):")
+            for i in fabricated:
+                doc.add_paragraph(f"{i.get('kind','')}: {i.get('raw','')}",
+                                  style="List Bullet")
+        if omitted:
+            doc.add_paragraph(
+                "AMBER — figures in the source contract absent from the draft. 8-K "
+                "disclosure is selective; confirm none of these is legally material:")
+            for i in omitted:
+                doc.add_paragraph(f"{i.get('kind','')}: {i.get('raw','')}",
+                                  style="List Bullet")
 
     compliance = draft.get("_compliance") or []
     if compliance:
@@ -682,6 +715,28 @@ def _review_html(draft: dict) -> str:
         f"<td>{esc(c.get('requirement',''))}</td></tr>"
         for c in draft.get("_compliance") or []
     )
+    guard = draft.get("_guardrail") or {}
+    guard_html = ""
+    if guard.get("items") is not None:
+        gitems = guard.get("items") or []
+        def _grows(status):
+            return "".join(
+                f"<tr><td>{esc(i.get('kind',''))}</td><td>{esc(i.get('raw',''))}</td>"
+                f"<td>{esc((i.get('source_snippet') or '') if status=='omitted' else '')}</td></tr>"
+                for i in gitems if i.get("status") == status)
+        fab, om = _grows("fabricated"), _grows("omitted")
+        verdict = guard.get("verdict", "")
+        cls = {"blocked": "gr-red", "needs_review": "gr-amber"}.get(verdict, "gr-green")
+        guard_html = (
+            f"<h2>Fact reconciliation (source grounding)</h2>"
+            f"<p class='verdict {cls}'>{esc(_GUARDRAIL_VERDICT.get(verdict, verdict))}</p>"
+            + ("<p class='note'>RED — in the draft, NOT found in the source contract "
+               "(likely fabricated):</p><table><thead><tr><th>Kind</th><th>Draft value"
+               "</th><th></th></tr></thead><tbody>" + fab + "</tbody></table>" if fab else "")
+            + ("<p class='note'>AMBER — in the source contract, absent from the draft "
+               "(8-K disclosure is selective; confirm none is legally material):</p>"
+               "<table><thead><tr><th>Kind</th><th>Source value</th><th>Context"
+               "</th></tr></thead><tbody>" + om + "</tbody></table>" if om else ""))
     return f"""<!doctype html><html><head><meta charset="utf-8"><style>
       body {{ font-family: 'Times New Roman', Georgia, serif; color: #000; padding: 50px 60px;
               font-size: 13px; line-height: 1.45; }}
@@ -691,11 +746,16 @@ def _review_html(draft: dict) -> str:
       th {{ background: #1a2238; color: #fff; }}
       tr.unverified td {{ color: #b4232a; font-weight: 600; }}
       .note {{ color: #555; font-size: 12px; }}
+      .verdict {{ font-weight: 700; padding: 8px 10px; border-radius: 4px; margin-top: 8px; }}
+      .gr-red {{ background: #fbe6e7; color: #8f1a1f; }}
+      .gr-amber {{ background: #fdf1dc; color: #7a5200; }}
+      .gr-green {{ background: #e6f4ea; color: #1e6b34; }}
     </style></head><body>
       <h1>8-K Draft — Review Materials (Item {esc(draft.get('item',''))})</h1>
       <p class="note">Companion to the drafted 8-K for source contract
       {esc(draft.get('_source_contract','—'))}. NOT part of the filing — for internal
       review only. Verify every fact below against the source contract.</p>
+      {guard_html}
       {"<h2>SEC requirement checks</h2><table><thead><tr><th>Status</th><th>Requirement</th></tr></thead><tbody>" + compliance_rows + "</tbody></table>" if compliance_rows else ""}
       {"<h2>Precedents used (style reference only)</h2><ul>" + precedents + "</ul>" if precedents else ""}
       {"<h2>Fact -&gt; source trace</h2><table><thead><tr><th>Fact</th><th>Source quote</th><th>Verified</th></tr></thead><tbody>" + facts_rows + "</tbody></table>" if facts_rows else ""}
