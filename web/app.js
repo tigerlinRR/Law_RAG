@@ -591,15 +591,17 @@ function renderDraftInto(r, report, meta) {
     const items = g.items || [];
     const fab = items.filter((i) => i.status === "fabricated").length;
     const om = items.filter((i) => i.status === "omitted").length;
+    // RED (fabrication) is the only status that blocks; omissions are review-only
+    // and never block (spec §4, amended 2026-07-10).
     let cls, msg;
-    if (g.verdict === "blocked") {
+    if (fab > 0) {
       cls = "gr-blocked";
       msg = `⚠ BLOCKED — ${fab} figure(s) in the draft are NOT grounded in the source ` +
             `contract. Do not treat as ready. See the Review pack for the list.`;
-    } else if (g.verdict === "needs_review") {
+    } else if (om > 0) {
       cls = "gr-review";
-      msg = `Needs review — ${om} figure(s) in the source are not in the draft ` +
-            `(8-K disclosure is selective; confirm none is material). See the Review pack.`;
+      msg = `Fact check clean (no ungrounded figures). ${om} required source figure(s) ` +
+            `not in the draft — review-only, does not block. See the Review pack.`;
     } else {
       cls = "gr-clean";
       msg = "✓ Fact check clean — every figure in the draft is grounded in the source.";
