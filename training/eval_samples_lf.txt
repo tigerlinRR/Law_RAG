@@ -1,0 +1,371 @@
+===== AAPL Item 7.01 (n/a) =====
+--- REAL ---
+Item 7.01
+
+Regulation FD Disclosure.
+
+On April 23, 2024, the U.S. District Court for the Northern District of California (the “District Court”) issued an order granting preliminary approval of the proposed settlement of
+the consolidated derivative lawsuits captioned In re Apple Inc. Stockholder Derivative Litigation , Case No. 4:19-cv-05153-YGR (N.D. Cal.) and In re Apple Inc. Stockholder Derivative Litigation , Lead Case No. 19CV355213 (Cal. Super. Ct., Santa Clara County), and other potential related derivative claims.
+
+As required by the District Court’s order, copies of (i) the Notice of Pendency and Proposed Settlement of Shareholder Derivative Actions, and (ii) the Amended Stipulation and
+Agreement of Compromise, Settlement, and Release (and the exhibits attached thereto) are attached hereto as Exhibits 99.1 and 99.2, respectively. The information contained in this Current Report, including Exhibits 99.1 and 99.2, shall not be
+deemed “filed” for purposes of Section 18 of the Securities Exchange Act of 1934, as amended (the “Exchange Act”), or incorporated by reference in any filing under the Securities Act of 1933, as amended, or the Exchange Act, except as shall be
+expressly set forth by specific reference in such a filing.
+
+--- BASE ---
+**Item 7.01. Regulation FD Disclosure.**
+
+On April 29, 2024, the Company entered into an Amended Stipulation and Agreement of Compromise, Settlement, and Release (the “Stipulation”) with respect to the stockholder derivative litigation styled *In re Apple Inc. Stockholder Derivative Litigation*, Case No. 4:19-cv-05153-YGR, pending in the United States District Court for the Northern District of California, Oakland Division (the “Federal Action”), and the related action styled *In re Apple Inc. Stockholder Derivative Litigation*, Lead Case No. 19CV355213, pending in the Superior Court of the State of California, County of Santa Clara (the “California Action”).
+
+The Stipulation, which supersedes the Stipulation of Settlement dated February 8, 2024, is intended to fully, finally, and forever settle the Settled Plaintiffs’ Claims as against the Released Defendants’ Parties. The Federal Action arose from complaints alleging, among other things, that certain defendants breached fiduciary duties by allowing the Company to address the effects of aging iPhone batteries through iOS software updates that slowed performance without customer knowledge or consent, and by making false and misleading statements to investors regarding the effects of aging iPhone batteries on sales growth and demand in the Greater China region. The California Action asserted similar claims.
+
+The Stipulation is subject to the approval of the Federal Court and the terms and conditions expressly provided therein. A copy of the Stipulation is attached hereto as Exhibit 99.2 to this Report on Form 8-K and is incorporated herein by reference.
+
+--- ADAPTER ---
+Item 7.01. Regulation FD Disclosure.
+
+On April 29, 2024, the Company issued a press release announcing the settlement of the Apple Inc. Stockholder Derivative Litigation. A copy of the press release is furnished as Exhibit 99.1 to this Current Report on Form 8-K.
+
+The information in this Item 7.01 and Exhibit 99.1 of this Current Report on Form 8-K is furnished and shall not be deemed to be “filed” for the purposes of Section 18 of the Securities Exchange Act of 1934, as amended (the “Exchange Act”), or otherwise subject to the liabilities of that section. The information in this Item 7.01 and Exhibit 99.1 of this Current Report on Form 8-K shall not be incorporated by reference into any filing under the Securities Act of 1933, as amended, or the Exchange Act, whether made before or after the date of this Current Report on Form 8-K, regardless of any general incorporation language in any such filing.
+
+
+===== AAPL Item 7.01 (n/a) =====
+--- REAL ---
+Item 7.01
+Regulation FD Disclosure. On November 6, 2022, Apple Inc. (“Apple”) issued an investor update. A copy of Apple’s update is attached hereto as Exhibit 99.1. The information contained in this Current Report shall not be deemed “filed” for purposes of Section 18 of the Securities Exchange Act of 1934, as amended (the “Exchange Act”), or incorporated by reference in any filing under the Securities Act of 1933, as amended, or the Exchange Act, except as shall be expressly set forth by specific reference in such a filing.
+
+--- BASE ---
+<think>
+Thinking Process:
+
+1.  **Deconstruct the Source Document:**
+    *   *Header:* EX-99.1, Update on Supply of iPhone 14 Pro and iPhone 14 Pro Max, CUPERTINO, California — November 6, 2022.
+    *   *Key Facts:*
+        *   COVID-19 restrictions impacted the primary iPhone 14 Pro and iPhone 14 Pro Max assembly facility in Zhengzhou, China.
+        *   Facility operating at significantly reduced capacity.
+        *   Company prioritizing health and safety of workers.
+        *   Strong demand continues for iPhone 14 Pro and iPhone 14 Pro Max.
+        *   Expect lower iPhone 14 Pro and iPhone 14 Pro Max shipments than previously anticipated.
+        *   Customers will experience longer wait times.
+        *   Working with supplier to return to normal production levels while ensuring health and safety.
+    *   *Boilerplate/Legal:* Forward-looking statements disclaimer, risk factors, company description, press contacts. (These are generally not included in the Item 7.01 body text of an 8-K, though the 8-K might reference the exhibit. The instruction is to draft the Item 7.01 disclosure based on the facts, so I should focus on the material terms.)
+
+2.  **Determine Structure of Item 7.01 Disclosure:**
+    *   Item 7.01 of Form 8-K is "Regulation FD Disclosure."
+    *   Standard language usually states: "On [Date], the registrant issued a press release, a copy of which is attached as Exhibit 99.1 hereto."
+    *   Sometimes the text of the press release is included, or a summary is provided. The prompt asks to "draft the Item 7.01... disclosure... using only the facts provided."
+    *   In a real 8-K, Item 7.01 often just references the exhibit, or includes the text. Since the user wants the disclosure drafted, I should provide the standard Item 7.01 text.
+    *   *Drafting Item 7.01:*
+        *   "Item 7.01 Regulation FD Disclosure."
+        *   "On November 6, 2022, Apple Inc. (the "Company") issued a press release announcing an update on the supply of iPhone 14 Pro and iPhone 14 Pro Max devices. A copy of the press release is attached hereto as Exhibit 99.1."
+        *   *Self-Correction on Style:* The prompt asks for "concise, neutral style... disclosing only material terms." Sometimes Item 7.01 includes the text of the release. If I include the text, it should be the material parts. However, usually, the 8-K Item 7.01 text is brief, and the Exhibit contains the full release. The prompt might be asking for the text that goes *into* the 8-K body under Item 7.01.
+        *   *Best Practice:* Item 7.01 typically reads: "On [Date], the registrant issued a press release... The text of the press release is set forth below [or attached as Exhibit 99.1]."
+        *   Given the instruction "disclosing only material terms," I should extract the material terms.
+        *   *Material Terms:*
+        *   Impact: COVID-19 restrictions at Zhengzhou, China assembly facility.
+        *   Status: Significantly reduced capacity.
+        *   Consequence: Lower shipments than anticipated; longer customer wait times.
+        *   Context: Strong demand; prioritizing worker health/safety; working to return to normal production.
+        *   *Drafting the Body:*
+        *   "Item 7.01 Regulation FD Disclosure. On November 6, 2022, the Company issued a press release regarding the supply of iPhone 14 Pro and iPhone 14 Pro Max products. The press release disclosed that COVID-19 restrictions have temporarily impacted the primary assembly facility for these products in Zhengzhou, China, causing the facility to operate at significantly reduced capacity. As a result, the Company expects lower shipments of iPhone 14 Pro and iPhone 14 Pro Max devices than previously anticipated and anticipates longer customer wait times. The Company noted that demand for these products remains strong and that it is working with its supplier to return to normal production levels while prioritizing worker health and safety."
+
+3.  **Review against Constraints:**
+    *   *Concise, neutral style?* Yes. No marketing fluff ("revolutionized personal technology," "best products on earth"). No forward-looking disclaimer language in the disclosure body (that belongs in the exhibit or
+
+--- ADAPTER ---
+Item 7.01
+Regulation FD Disclosure. On November 6, 2022, Apple Inc. issued a press release titled “Update on Supply of iPhone 14 Pro and iPhone 14 Pro Max.” A copy of the press release is furnished as Exhibit 99.1 to this Current Report on Form 8-K. The information in Item 7.01 of this Current Report on Form 8-K, including Exhibit 99.1, is being furnished and shall not be deemed to be “filed” for purposes of Section 18 of the Securities Exchange Act of 1934, as amended (the “Exchange Act”), or otherwise subject to the liabilities of that section, nor shall it be deemed incorporated by reference in any filing under the Securities Act of 1933, as amended, or the Exchange Act, except as expressly set forth by specific reference in such a filing.
+
+
+===== AAPL Item 5.02 (officer / director) =====
+--- REAL ---
+Item 5.02
+Departure of Directors or Certain Officers; Election of Directors; Appointment of Certain Officers; Compensatory Arrangements of Certain Officers. On August 17, 2022, the Compensation Committee (the “Committee”) of the Board of Directors (the “Board”) of Apple Inc. (“Apple”) approved the Apple Inc. Executive Cash Incentive Plan (the “Plan”) under which eligible participants may be granted cash incentive awards based on the achievement of performance goals over performance periods established by the Committee (each, an “Award”). The Plan is intended to attract, retain, motivate, reward and align the efforts of Plan participants with the objectives of Apple shareholders. Eligible participants are members of Apple’s executive team, including Apple’s named executive officers and other employees designated by the Committee. The Plan is administered by the Committee. The Committee establishes performance periods, which generally correlate to Apple’s fiscal years, and performance goals for which achievement will be measured over each performance period. The Committee also establishes any applicable threshold, target and maximum level of achievement for each performance goal. The Committee will specify the performance period, performance goal(s), maximum payout opportunity and any other terms and conditions for the Awards. The payout that a participant may receive under the Plan with respect to an Award is based upon whether and to what extent the performance goals have been achieved, as determined by the Committee after receiving the necessary information to evaluate such achievement after the end of the performance period. The payout will be made in cash as soon as practicable after the Committee considers the achievement of the performance goals, and to the extent applicable, a participant’s performance. If a participant terminates service prior to a payout date, the participant’s Award will be forfeited unless otherwise determined by the Committee. The foregoing description of the Plan is a summary and is qualified in its entirety by reference to the full text of the Plan, a copy of which is attached as Exhibit 10.1 hereto and is incorporated by reference herein.
+
+--- BASE ---
+Item 5.02 Departure of Directors or Certain Officers; Election of Directors; Appointment of Certain Officers; Compensatory Arrangements of Certain Officers
+
+On August 17, 2022, the Compensation Committee of the Board of Directors of Apple Inc. (the “Company”) approved the Apple Inc. Executive Cash Incentive Plan (the “Plan”). The Plan provides for the grant of cash incentive awards to eligible Participants, defined as members of the Company’s executive team (including executive officers as defined in Rule 3b-7 under the Securities Exchange Act of 1934, as amended) and other employees selected by the Committee.
+
+Awards under the Plan are based on the achievement of Performance Goals established by the Committee for a specified Performance Period. Performance Goals may include financial or non-financial criteria such as operating income, earnings, cash flow, total shareholder return, and other metrics selected by the Committee. The Committee has sole discretion to administer the Plan, establish Performance Goals, determine payouts, and adjust awards. Awards are paid in cash as soon as practicable after the Committee determines the achievement of Performance Goals, subject to applicable tax withholding. Awards are non-transferable and subject to forfeiture upon termination of service, unless otherwise determined by the Committee. The Plan is an unfunded plan and is intended to comply with Code Section 409A.
+
+A copy of the Plan is filed as Exhibit 10.1 to this Current Report on Form 8-K and is incorporated herein by reference.
+
+--- ADAPTER ---
+Item 5.02 Departure of Directors or Certain Officers; Election of Directors; Appointment of Certain Officers; Compensatory Arrangements of Certain Officers.
+On August 17, 2022, the Compensation Committee of the Board of Directors (the “Compensation Committee”) of Apple Inc. (the “Company”) approved the Apple Inc. Executive Cash Incentive Plan (the “Plan”). The Plan provides for cash incentive awards to be granted to members of the Company’s executive team, which shall include, without limitation, an executive officer of the Company within the meaning of Rule 3b-7 (or any successor provision thereto) promulgated under the Securities Exchange Act of 1934, as amended, and such other employees of the Company or any of its subsidiaries who are selected by the Compensation Committee for participation in the Plan. The Plan is intended to comply with the requirements of Section 409A of the Internal Revenue Code of 1986, as amended, or an exemption or exclusion therefrom. The Plan was approved by the Compensation Committee on August 17, 2022 and became effective on August 17, 2022. The Plan shall remain in effect until terminated by the Compensation Committee. The Plan is administered by the Compensation Committee, which shall exercise any authority under the Plan in its sole discretion. The Compensation Committee shall have the full authority to (i) take any actions that it deems necessary or advisable for the operation and administration of the Plan, including, without limitation, adopting Plan rules, procedures or policies; (ii) correct any error, omission or defect in the Plan or any award granted under the Plan; (iii) construe and interpret the terms and conditions of the Plan and any awards granted under the Plan; and (iv) adopt, amend, or terminate any awards granted under the Plan, including, without limitation, modifying or adjusting the performance goals applicable to any award as it deems necessary or appropriate to fulfill the intent and purpose of the Plan. The Compensation Committee’s actions, interpretations and constructions with regard to the Plan shall be final, conclusive and binding on all persons for all purposes. Any action taken or determination made by the Compensation Committee may be applicable to all participants, solely to a class of participants or solely a single participant and, subject to applicable law, need not be uniform among participants. The Plan provides for cash incentive awards to be granted to participants for a fiscal year or such other period as the Compensation Committee deems advisable (the “Performance Period”). The Compensation Committee shall establish the performance goals, and any threshold, target and maximum measurement thereof, applicable to any award or specified portion thereof for the applicable Performance Period, the maximum payout opportunity as to such award or the specified portion thereof, and any other terms and conditions for the award, as soon as practicable before or after the beginning of the fiscal year. The Compensation Committee shall determine whether any performance goal, as the same may have been modified or adjusted by the Compensation Committee, has been met, in whole or in part, the weighting and evaluation of each performance goal with respect to any award, and any payout adjustments based on an individual participant’s performance. As soon as practicable after the information necessary for evaluating achievement of the performance goals, such as the Company’s audited financial statements, are available for a fiscal year for the awards then outstanding, the Compensation Committee will review and determine whether and to what extent the performance goals have been achieved. Final award payouts shall be paid in cash as soon as practicable after the Compensation Committee considers the achievement of the performance goals and, to the extent applicable, a participant’s individual performance, unless such payout is deferred in accordance with the Apple Inc. Deferred Compensation Plan (or any successor plan thereto). The Plan provides that if a participant terminates service with the Company prior to a payout date, any awards granted and outstanding will be forfeited unless otherwise determined by the Compensation Committee. A participant who is on a Company-approved leave of absence shall remain eligible to participate in the Plan but may receive a pro-rated payout, as determined by the Compensation Committee. The Plan provides that the Compensation Committee may at any time and in its sole discretion suspend, amend or terminate the Plan. The Plan is intended to constitute an unfunded plan for incentive compensation. Prior to the payout of any award, nothing contained in the Plan shall give any participant any rights that are greater than those of a general creditor of the Company. No amounts awarded or accrued under the Plan shall be funded, set aside, subject to interest payment or otherwise segregated prior to payout of an award. Any award payable under the Plan is voluntary and occasional and does not create any contractual or other right to receive awards in future years or benefits in lieu of such awards. The foregoing description of the Plan is not complete and is qualified in its entirety by reference to the full text of the Plan, a copy of which is filed as Exhibit 10.1 to this Current Report on
+
+
+===== AAPL Item 5.02 (officer / director) =====
+--- REAL ---
+Item 5.02
+Departure of Directors or Certain Officers; Election of Directors; Appointment of Certain Officers; Compensatory Arrangements of Certain Officers The Board of Directors (the “Board”) of Apple Inc. (the “Company” or “Apple”) previously adopted, subject to shareholder approval, the Apple Inc. 2022 Employee Stock Plan (the “2022 Plan”). Apple’s shareholders approved the 2022 Plan at the Company’s Annual Meeting of Shareholders held on March 4, 2022 (the “Annual Meeting”). Apple’s grant authority under the Apple Inc. 2014 Employee Stock Plan (the “2014 Plan”) will terminate after the 2022 Plan is registered on Form S-8. The 2022 Plan, which became effective upon shareholder approval, permits the granting of stock options, stock appreciation rights, stock grants and restricted stock units. Employees and consultants of Apple and its subsidiaries are eligible to participate in the 2022 Plan. The maximum number of shares that may be issued or transferred pursuant to awards under the 2022 Plan will equal:
+
+•
+
+510 million shares, plus
+
+•
+
+the number of shares available for new award grants under the 2014 Plan on the date of the Annual Meeting, plus
+
+•
+
+the number of any shares subject to stock options granted under the 2014 Plan and outstanding as of the date of the Annual Meeting which expire or terminate after the Annual Meeting, plus
+
+•
+
+two times the number of shares subject to restricted stock units (“RSUs”) or restricted awards granted under the 2014 Plan that are outstanding as of the date of the Annual Meeting that are forfeited or terminated or with respect to which shares are withheld to satisfy tax withholding obligations after the date of the Annual Meeting. The maximum number of shares that may be issued or transferred pursuant to awards under the 2022 Plan as a result of applying the share limit formula described above will not exceed 1,274,374,682 shares. Shares issued with respect to full-value awards (RSUs or restricted stock awards) granted under the 2022 Plan are counted against the 2022 Plan’s aggregate share limit as two shares for every one share actually issued in connection with the full-value award. The 2022 Plan also includes other rules for counting shares against the share limits. The foregoing brief description is qualified in its entirety by the text of the 2022 Plan, a copy of which is filed as Exhibit 10.1 hereto and incorporated herein by reference. Grants under the 2022 Plan may be evidenced by entry into the Restricted Stock Unit Award Agreement and the Performance Award Agreement under the 2022 Plan, forms of which are filed as Exhibits 10.2 and 10.3 hereto and incorporated herein by reference.
+
+--- BASE ---
+**Item 5.02. Departure of Directors or Certain Officers; Election of Directors; Appointment of Certain Officers; Compensatory Arrangements of Certain Officers.**
+
+**Appointment of Certain Officers**
+
+On [Date], Apple Inc. (the “Company”) appointed [Name] as [Title] and [Name] as [Title], effective as of [Date].
+
+**Compensatory Arrangements**
+
+The Company has entered into an employment agreement with [Name], dated [Date], pursuant to which [Name] will serve as [Title]. Under the terms of the agreement, [Name] will receive an annual base salary of $[Amount], subject to adjustment by the Board of Directors. [Name] is eligible to participate in the Company’s 2022 Employee Stock Plan, as described in Exhibit 10.1 hereto.
+
+The Company has entered into an employment agreement with [Name], dated [Date], pursuant to which [Name] will serve as [Title]. Under the terms of the agreement, [Name] will receive an annual base salary of $[Amount], subject to adjustment by the Board of Directors. [Name] is eligible to participate in the Company’s 2022 Employee Stock Plan, as described in Exhibit 10.1 hereto.
+
+**Exhibit 10.1**
+
+Exhibit 10.1 to this Form 8-K is incorporated by reference herein.
+
+--- ADAPTER ---
+Item 5.02 Departure of Directors or Certain Officers; Election of Directors; Appointment of Certain Officers; Compensatory Arrangements of Certain Officers. On March 4, 2022, the shareholders of Apple Inc. (the “Company”) approved the Company’s 2022 Employee Stock Plan (the “2022 Plan”). The 2022 Plan is intended to replace the Company’s 2014 Employee Stock Plan (the “2014 Plan”), which was approved by the Company’s shareholders on October 27, 2014. The 2022 Plan provides for the grant of stock options, stock appreciation rights, restricted stock, and restricted stock units to employees, directors, and consultants of the Company and its affiliates. The 2022 Plan authorizes the issuance of up to 500 million shares of the Company’s common stock. The 2022 Plan also provides for the automatic annual increase in the number of shares authorized for issuance under the 2022 Plan by the lesser of (i) 1% of the number of shares of the Company’s common stock outstanding on the last day of the immediately preceding fiscal year, or (ii) such lesser number of shares as may be determined by the Company’s Board of Directors. The 2022 Plan will be administered by the Compensation Committee of the Board of Directors (the “Committee”). The Committee has the authority to determine the terms and conditions of awards granted under the 2022 Plan, including the exercise price of options and stock appreciation rights, the vesting schedule of awards, and the performance goals applicable to performance-based awards. The Committee may also delegate its authority to one or more officers of the Company to grant awards to employees who are not directors or officers of the Company. The 2022 Plan contains provisions that are substantially similar to the provisions of the 2014 Plan, with certain modifications. For example, the 2022 Plan provides for a maximum term of 10 years for options and stock appreciation rights, whereas the 2014 Plan provided for a maximum term of seven years for such awards. The 2022 Plan also provides for the Committee to determine the exercise price of options and stock appreciation rights, whereas the 2014 Plan required that the exercise price of such awards be equal to the fair market value of the underlying shares on the date of grant. The 2022 Plan also provides for the Committee to determine the performance goals applicable to performance-based awards, whereas the 2014 Plan required that such performance goals be approved by the Company’s shareholders. The 2022 Plan also provides for the Committee to determine the vesting schedule of awards, whereas the 2014 Plan required that awards vest over a period of not less than three years. The 2022 Plan also provides for the Committee to determine the terms and conditions of awards granted to non-employee directors, whereas the 2014 Plan required that such awards be granted in accordance with the Company’s Non-Employee Director Compensation Program. The 2022 Plan also provides for the Committee to determine the terms and conditions of awards granted to consultants, whereas the 2014 Plan did not provide for the grant of awards to consultants. The 2022 Plan also provides for the Committee to determine the terms and conditions of awards granted to employees who are not directors or officers of the Company, whereas the 2014 Plan required that such awards be granted in accordance with the Company’s Long-Term Incentive Program. The 2022 Plan also provides for the Committee to determine the terms and conditions of awards granted to employees who are directors or officers of the Company, whereas the 2014 Plan required that such awards be granted in accordance with the Company’s Executive Compensation Program. The 2022 Plan also provides for the Committee to determine the terms and conditions of awards granted to employees who are not directors or officers of the Company and who are not eligible to participate in the Company’s Long-Term Incentive Program, whereas the 2014 Plan did not provide for the grant of awards to such employees. The 2022 Plan also provides for the Committee to determine the terms and conditions of awards granted to employees who are directors or officers of the Company and who are not eligible to participate in the Company’s Executive Compensation Program, whereas the 2014 Plan did not provide for the grant of awards to such employees. The 2022 Plan also provides for the Committee to determine the terms and conditions of awards granted to employees who are not directors or officers of the Company and who are not eligible to participate in the Company’s Long-Term Incentive Program or the Company’s Executive Compensation Program, whereas the 2014
+
+
+===== KSCP Item 1.01 (equity financing) =====
+--- REAL ---
+Item 1.01 –
+Entry into a Material Definitive Agreement
+
+On February 27, 2026 (the “Closing Date”), Knightscope,
+Inc., a Delaware corporation (the “Company” or “Knightscope”), entered into a Securities Purchase Agreement (the
+“Purchase Agreement”) with Event Risk LLC, an Indiana limited liability company (“Event Risk”), and Eric Rose
+(the “Seller”), pursuant to which Knightscope acquired all of the issued and outstanding membership interests of Event Risk
+(the “Acquired Interests”).
+
+Purchase Consideration
+
+Pursuant to the Purchase Agreement, aggregate consideration consists
+of:
+
+1. $5.0
+million Closing Cash Payment
+2. Assumption
+and full discharge of approximately $1.1 million of indebtedness of Event Risk owed to Frost Bank
+3. Issuance
+of 1,724,418 shares of Knightscope Class A Common Stock, par value $0.001 per share (the “Equity Consideration”)
+4. Deferred
+cash payments totaling $4.0 million, payable in quarterly installments of $0.5 million from March 31, 2027 through December 31, 2028
+5. Potential
+contingent consideration consisting of:
+
+○ Earn-Out
+Payments of up to $2.0 million tied to 2026 revenue and gross margin percentage thresholds
+○ Cash
+Revenue Share Payments (capped at $10.0 million aggregate) for calendar years 2027–2031
+○ Equity
+Revenue Share Issuances (subject to the aggregate cap of the lower of (i) 2.5% of the fully diluted shares outstanding and (ii) $3.0
+million in grant-date value).
+
+The Purchase Agreement contains customary representations, warranties,
+covenants, indemnification provisions, working capital adjustment mechanics, non-compete provisions, and tax treatment provisions. The
+foregoing description does not purport to be complete and is qualified in its entirety by reference to the Purchase Agreement filed as
+an exhibit to this Current Report.
+
+--- BASE ---
+ITEM 1.01
+ENTRY INTO A MATERIAL DEFINITIVE AGREEMENT
+
+On February 27, 2026, Knightscope, Inc., a Delaware corporation (the “Company”), entered into a Securities Purchase Agreement (the “Agreement”), by and among the Company, Event Risk LLC, an Indiana limited liability company (the “Company”), and Eric Rose (the “Seller”).
+
+Pursuant to the Agreement, the Seller agreed to sell, transfer, assign, and deliver to the Company all of the issued and outstanding membership interests of the Company (the “Acquired Interests”), and the Company agreed to purchase the Acquired Interests for an aggregate purchase price consisting of: (i) a closing cash payment of $5,000,000; (ii) the issuance of 1,724,418 shares of the Company’s Class A Common Stock, par value $0.001 per share (the “Equity Consideration”); (iii) deferred cash payments totaling $4,000,000, payable in quarterly installments of $500,000 beginning March 31, 2027 and ending December 31, 2028; (iv) potential earn-out payments; and (v) potential cash and equity revenue share payments. The purchase price is subject to adjustment based on the Company’s net working capital and certain expenses as of the closing date.
+
+At closing, the Company also agreed to discharge a specified indebtedness owed to Frost Bank and to distribute approximately $663,045 in cash to the Seller as a closing dividend. The Agreement contains customary representations, warranties, covenants, and indemnification provisions.
+
+The Agreement is filed as Exhibit 2.1 to this Current Report on Form 8-K and is incorporated herein by reference.
+
+--- ADAPTER ---
+Item 1.01. Entry into a Material Definitive Agreement.
+
+On February 27, 2026, Knightscope, Inc. (the “Company”)
+entered into a Securities Purchase Agreement (the “Purchase Agreement”) with Event Risk LLC (“Event Risk”) and
+Eric Rose (the “Seller”). Pursuant to the Purchase Agreement, the Company acquired all of the issued and outstanding membership
+interests of Event Risk in exchange for (i) $5,000,000 in cash, (ii) 1,724,418 shares of the Company’s Class A Common Stock, par
+value $0.001 per share (the “Common Stock”), (iii) $4,000,000 in cash payable in four equal installments of $1,000,000 on
+March 31, 2027, June 30, 2027, September 30, 2027 and December 31, 2027, (iv) an earn-out payment of up to $1,000,000 in cash, payable
+in equal installments of $250,000 on March 31, 2027, June 30, 2027, September 30, 2027 and December 31, 2027, if Event Risk achieves certain
+revenue targets, (v) a cash revenue share payment of up to $1,000,000 in cash, payable in equal installments of $250,000 on March 31, 2027,
+June 30, 2027, September 30, 2027 and December 31, 2027, if Event Risk achieves certain revenue targets, and (vi) an equity revenue share
+issuance of up to 1,000,000 shares of Common Stock, issuable in equal installments of 250,000 shares on March 31, 2027, June 30, 2027, September
+30, 2027 and December 31, 2027, if Event Risk achieves certain revenue targets.
+
+The foregoing description of the Purchase Agreement does not purport
+to be complete and is qualified in its entirety by reference to the full text of the Purchase Agreement, a copy of which is filed as Exhibit
+2.1 to this Current Report on Form 8-K and is incorporated herein by reference.
+
+
+===== KSCP Item 2.01 (unclassified) =====
+--- REAL ---
+Item 2.01 – Completion of Acquisition or Disposition of Assets
+
+On February 27, 2026, Knightscope completed the acquisition of Event
+Risk pursuant to the Purchase Agreement. Event Risk is now a wholly owned subsidiary of Knightscope.
+
+Strategic Rationale
+
+Knightscope believes this acquisition accelerates its long-term strategy
+to operate a fully integrated autonomous security platform combining hardware, software, and human response into a single managed system.
+
+Additionally, the acquisition expands Knightscope’s immediate
+market reach and enables the Company to be a single provider of the historically fragmented security solutions offered.
+
+Historically, physical security has been delivered through fragmented
+components -- guards, cameras, monitoring centers, and patrol services operating independently. Knightscope’s strategy is to integrate:
+
+· Autonomous
+Security Robots and Emergency Communication Devices (hardware);
+· AI-driven
+event detection and orchestration software; and
+· Licensed
+security personnel and response services
+
+into a coordinated operating model designed to deliver detection, deterrence,
+verification, and response as a unified outcome. Knightscope believes that security buyers purchase improved outcomes rather than individual
+devices or labor hours. By owning the human layer alongside its technology platform, Knightscope can deploy its hardware and AI software
+within a managed service structure that supports enterprise accountability and scalable deployment.
+
+The Company expects this structure to:
+
+· Accelerate
+adoption of its robotics and sensing technologies;
+
+· Enable
+participation in security contracts requiring licensed guarding providers;
+
+· Increase
+multi-site deployment opportunities; and
+
+· Improve
+customer retention through integrated service delivery.
+
+Business Overview of Event Risk
+
+Event Risk is a provider of security, executive protection, investigations,
+and risk mitigation services operating throughout the United States. The business delivers licensed security personnel and response services
+to corporate and commercial clients.
+
+Knightscope intends to integrate Event Risk personnel and operations
+into its broader Autonomous Security Force strategy, whereby technology-enabled supervision allows human operators to oversee multiple
+sites and respond to verified events.
+
+Long-Term Operating Model
+
+Knightscope anticipates evolving the combined model over time through:
+
+· Increased
+hardware density per site;
+
+· AI-driven
+alert reduction and prioritization;
+
+· Technology-enabled
+supervision across multiple locations; and
+
+· Gradual
+automation of routine patrol functions, unfit or unsafe for a human.
+
+The Company believes this approach may shift the cost structure from
+labor-intensive deployments toward technology-enabled productivity over time.
+
+The foregoing description of the Purchase Agreement and the transactions
+contemplated thereby does not purport to be complete and is qualified in its entirety by reference to the full text of the Purchase Agreement,
+a copy of which is filed as Exhibit 2.1 to this Current Report on Form 8-K and is incorporated herein by reference.
+
+Sources and Uses of Funds
+
+The transaction was funded as follows:
+
+Sources
+
+· Cash
+from Knightscope: $6.1 million
+
+Uses
+
+· Payoff
+of Frost Bank Line of Credit: $1.1 million
+
+· Cash
+Consideration to Seller: $5.0 million
+
+Total Sources and Uses: $6.1 million
+
+The Frost Bank indebtedness was fully discharged at closing.
+
+Contingent Consideration Summary
+
+Earn-Out Payments for Calendar Year 2026:
+
+· $2.0
+million if revenue is at least $35.0 million and gross margin is at least 20%;
+· $1.0
+million if revenue is at least $35.0 million and gross margin is between 10% and 20%;
+· $0
+if thresholds are not met.
+
+Cash Revenue Share Payments (2027–2031):
+
+· 5%
+of revenue between $30.0 million and $75.0 million;
+
+· 6%
+of revenue above $75.0 million;
+
+· Aggregate
+cap of $10.0 million.
+
+Equity Revenue Share Issuances:
+
+· Formula-based
+issuance tied to revenue above $50.0 million;
+
+· Aggregate
+cap of the lesser of 2.5% of fully diluted shares outstanding or $3.0 million in grant-date value.
+
+On March 2, 2026, Knightscope issued a press release announcing the
+acquisition of Event Risk. A copy of the press release is attached hereto as Exhibit 99.1
+
+and is incorporated herein by reference.
+
+--- BASE ---
+ITEM 2.01
+COMPLETION OF ACQUISITION OR DISPOSITION OF ASSETS
+
+On February 27, 2026, Knightscope, Inc., a Delaware corporation (the “Company”), completed the acquisition of all of the issued and outstanding membership interests of Event Risk LLC, an Indiana limited liability company (the “Acquired Business”), from Eric Rose (the “Seller”), pursuant to that certain Securities Purchase Agreement, dated February 27, 2026 (the “Purchase Agreement”), by and among the Company, the Company, and the Seller.
+
+Pursuant to the Purchase Agreement, the aggregate consideration paid by the Company to the Seller for the Acquired Business consisted of:
+
+1.  A cash payment of $5,000,000;
+2.  The issuance of 1,724,418 shares of the Company’s Class A Common Stock, par value $0.001 per share;
+3.  Deferred cash payments totaling $4,000,000, payable in quarterly installments of $500,000 beginning March 31, 2027 and ending December 31, 2028;
+4.  Potential earn-out payments;
+5.  Potential cash revenue share payments; and
+6.  Potential equity revenue share issuances.
+
+Additionally, prior to or simultaneously with the closing, the Acquired Business distributed $663,045.09 in cash to the Seller. The Company also discharged certain indebtedness of the Acquired Business, including amounts owed to Frost Bank. The purchase price is subject to adjustment based on the final determination of net working capital and company expenses as of the closing date.
+
+The foregoing description of the Purchase Agreement does not purport to be complete and is qualified in its entirety by reference to the full text of the Purchase Agreement, filed as Exhibit 2.1 to this Current Report on Form 8-K, which is incorporated herein by reference.
+
+--- ADAPTER ---
+Item 2.01 Completion of Acquisition or Disposition of Assets.
+
+The information set forth in Item 1.01 of this
+Current Report on Form 8-K is incorporated herein by reference.
+
+
