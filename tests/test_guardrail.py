@@ -56,11 +56,27 @@ def TP1_kscp_fabricated_installment():
 
 
 @case
-def TP2_kscp_frost_debt_omission():
+def TP2_kscp_frost_debt_omission_REDONLY_clean():
+    # Spec §4 (amended 2026-07-10): omission is REVIEW-ONLY and never blocks. In the
+    # shipped RED-only mode (no rubric mapping), a pure omission does NOT flag.
     src = ("At closing the Buyer discharged $1,100,000 of indebtedness owed to "
            "Frost Bank. Closing cash payment of $5,000,000.")
     draft = "The Company paid $5,000,000 in cash at closing."
-    assert has_omission(draft, src, "1100000"), "should AMBER the omitted $1.1M debt"
+    v, _ = _statuses(draft, src)
+    assert v == "clean", "RED-only: a pure omission must not block"
+
+
+@case
+def TP2_kscp_frost_debt_omission_OPTIONB():
+    # With the rubric MUST-disclose mapping supplied (Option B), the assumed-debt
+    # omission surfaces as AMBER -- still never blocking (verdict stays clean).
+    src = ("At closing the Buyer discharged $1,100,000 of indebtedness owed to "
+           "Frost Bank. Closing cash payment of $5,000,000.")
+    draft = "The Company paid $5,000,000 in cash at closing."
+    r = reconcile(draft, src, must_disclose={"indebtedness", "debt"})
+    assert r["verdict"] == "clean", "omission never blocks, even under Option B"
+    assert any(i["normalized"] == "1100000" and i["status"] == "omitted"
+               for i in r["items"]), "scoped AMBER should surface the $1.1M debt"
 
 
 @case
@@ -68,8 +84,13 @@ def TP3_aapl_share_count():
     src = ("The 2022 Plan authorizes 510,000,000 shares, with a maximum of "
            "1,274,374,682 shares issuable under the formula.")
     draft = "The 2022 Plan authorizes up to 500 million shares of common stock."
-    assert has_fabrication(draft, src, "500000000"), "500M != 510M -> fabrication"
-    assert has_omission(draft, src, "1274374682"), "cap should be AMBER omission"
+    assert has_fabrication(draft, src, "500000000"), "500M != 510M -> RED fabrication"
+    # cap omission is Option-B AMBER (review-only); under Option B it surfaces but the
+    # RED fabrication is what blocks.
+    r = reconcile(draft, src, must_disclose={"maximum"})
+    assert any(i["normalized"] == "1274374682" and i["status"] == "omitted"
+               for i in r["items"]), "scoped AMBER should surface the cap"
+    assert r["verdict"] == "blocked", "the 500M RED still blocks"
 
 
 @case

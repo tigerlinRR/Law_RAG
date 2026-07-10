@@ -220,19 +220,29 @@ def _party_in_source_text(d: Datum, source_low: str) -> bool:
 
 
 # --- public API ---------------------------------------------------------------
-def reconcile(draft_text: str, source_text: str) -> dict:
+def reconcile(draft_text: str, source_text: str,
+              must_disclose: set[str] | None = None) -> dict:
     """Reconcile every material datum in the DRAFT against the SOURCE.
 
-    Returns {"verdict": clean|needs_review|blocked, "items": [...]} where each item
-    is {raw, normalized, kind, status ∈ {matched,fabricated,omitted}, source_snippet}.
-    - fabricated (draft datum absent from source)  -> RED, blocks "ready"
-    - omitted   (source datum, of a kind the draft carries, absent from draft) -> AMBER
+    Returns {"verdict": clean|blocked, "items": [...]} where each item is
+    {raw, normalized, kind, status ∈ {matched,fabricated,omitted}, source_snippet}.
+
+    - fabricated (draft datum, incl. model-COMPUTED figures, absent from source) -> RED.
+      **RED is the only status that blocks** (spec §4, amended 2026-07-10).
+    - omitted (source datum absent from draft) -> AMBER, REVIEW-ONLY, never blocks and
+      never affects the verdict. A blanket omission check drowns RED in noise against
+      8-K's deliberately selective disclosure (39 AMBER in the field test), so omissions
+      are emitted ONLY for rubric MUST-disclose fields: pass `must_disclose` = context
+      keywords for the Item's required fields (e.g. 1.01 assumed debt -> {"indebtedness",
+      "debt"}). With none supplied we ship RED-only (Option A) -- safe on its own; lawyer
+      sign-off backstops materiality. Scoped AMBER (Option B) turns on when the
+      rubric->keyword mapping is wired.
     """
     d_data = extract(draft_text)
     s_data = extract(source_text)
     source_low = source_text.lower()
     items: list[dict] = []
-    blocked = review = False
+    blocked = False
 
     for d in d_data:
         hit = _find(d, s_data)
@@ -246,20 +256,20 @@ def reconcile(draft_text: str, source_text: str) -> dict:
                       "status": status,
                       "source_snippet": hit.ctx if hit else None})
 
-    draft_kinds = {d.kind for d in d_data}
-    reported: set[tuple] = set()
-    for s in s_data:
-        if s.kind not in draft_kinds:
-            continue                      # disclosure doesn't carry this kind of datum
-        if _find(s, d_data):
-            continue
-        dedup = (s.kind, str(s.canonical))
-        if dedup in reported:
-            continue
-        reported.add(dedup)
-        review = True
-        items.append({"raw": s.raw, "normalized": str(s.canonical), "kind": s.kind,
-                      "status": "omitted", "source_snippet": s.ctx})
+    if must_disclose:
+        kws = [k.lower() for k in must_disclose]
+        reported: set[tuple] = set()
+        for s in s_data:
+            if _find(s, d_data):
+                continue
+            if not any(k in (s.ctx or "").lower() for k in kws):
+                continue                  # not a rubric MUST-disclose field -> skip
+            dedup = (s.kind, str(s.canonical))
+            if dedup in reported:
+                continue
+            reported.add(dedup)
+            items.append({"raw": s.raw, "normalized": str(s.canonical), "kind": s.kind,
+                          "status": "omitted", "source_snippet": s.ctx})
 
-    verdict = "blocked" if blocked else "needs_review" if review else "clean"
+    verdict = "blocked" if blocked else "clean"   # RED-only drives the verdict
     return {"verdict": verdict, "items": items}

@@ -21,7 +21,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from . import llm, retrieve
+from . import guardrail, llm, retrieve
 from .summarize import CHECKLIST as _DEFAULT_CHECKLIST
 from .summarize import review_contract, verify_quote
 
@@ -451,6 +451,10 @@ def draft_8k(
         result["_forward_looking_statements"] = _FORWARD_LOOKING_STATEMENTS
     result["_compliance"] = _compliance_flags(item, result["disclosure"])
     full_text = review.get("_full_text", "")
+    # Fact-fidelity guardrail: reconcile every figure in the disclosure against the
+    # SOURCE contract. The style adapter fabricates numbers; this catches them (RED)
+    # and flags material omissions (AMBER) before a human treats the draft as ready.
+    result["_guardrail"] = guardrail.reconcile(result["disclosure"], full_text)
     for f in result.get("facts_used", []):
         f["verified"] = verify_quote(f.get("source_quote", ""), full_text)
     result["_source_contract"] = Path(contract_path).name
