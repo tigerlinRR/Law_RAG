@@ -28,12 +28,46 @@ adapter + per-customer style via RAG/rubric).
   q,k,v,o,gate,up,down_proj — the "safe" set; v1's `lora_target=all` hit the hybrid
   model's `linear_attn` SSM projections + `shared_expert_gate` and collapsed
   generation — do NOT use `all`).
+- **This is an interim run (v2 on 2,174 pairs), NOT the final training** — step A
+  (scale to ~3,000+ pairs → v3) is still pending.
 
-## Immediate next steps (recommended order: C → B, then A)
-- **C — human/legal quality check** of `training/eval_samples_lf.txt` (generated on the
-  RTX box, not in repo — ask user to paste a few). Verify: no invented facts not in the
-  source (compliance red line); tighter output didn't drop required elements. Can run
-  `draft._compliance_flags` over adapter outputs to check (a)-(d) + exhibit qualifier.
+## C — human/legal quality check DONE (2026-07-10): STYLE win, FACT red line hit
+Reviewed the 6 samples in `training/eval_samples_lf.txt` (AAPL 7.01×2, 5.02×2; KSCP
+1.01, 2.01) — adapter OFF vs ON vs REAL filing. Verdict: **adapter is a clear win on
+style/structure but FABRICATES specific figures on number-dense disclosures — the
+exact compliance red line we designed the RAG pipeline to avoid.**
+- ✅ **Style/structure**: AAPL 7.01 Reg-FD furnishing legend is textbook-correct;
+  tight 1.01 framing + qualifier; no `<think>`/placeholder leaks (base emitted both).
+- ❌ **Fact fabrication on complex filings**:
+  - **KSCP Item 1.01 (OUR CORE ITEM)** — re-invented the whole consideration
+    structure: deferred payment written as "$1M ×4 in 2027" (REAL = $500k/qtr ×8 over
+    2027–2028); earn-out "$1M in installments" (REAL = up to $2M tied to 2026
+    revenue/margin); cash/equity revenue-share figures all wrong; **dropped the $1.1M
+    Frost Bank debt assumption**. Base actually read the deferred schedule correctly —
+    so the info WAS in the source; the style-LoRA distorted it.
+  - **AAPL 5.02 (2022 stock plan)** — share count wrong (500M vs real 510M + formula
+    cap 1,274,374,682), invented an evergreen auto-increase clause, then degenerated
+    into a repetitive "whereas the 2014 Plan…" hallucination loop.
+  - **AAPL 5.02 (cash incentive plan)** — not fabricated but ran long and **truncated
+    at max_tokens** mid-sentence.
+- **Mechanical `_compliance_flags` on the KSCP 1.01 adapter text = 5/6 PASS** yet
+  misses every fabricated number — presence checks CANNOT catch format-correct-but-
+  wrong figures. Important limitation to remember.
+- **More data (v3) will help style, length calibration, and the degenerate-loop
+  problem, but will NOT fix number fidelity** — that's structural to using generative
+  weights for facts (number-recall 0.577→0.675 = still ~⅓ wrong). Zero-tolerance for
+  8-K numbers ⇒ facts MUST stay in the RAG/extract + verbatim-quote-verify layer.
+- **Product implication for deploy (B): adapter = STYLE layer only.** Either (A,
+  recommended) keep `draft.py`'s RAG extraction + `verify_quote` as the fact source and
+  use the adapter only to polish phrasing/structure, or (B) if the adapter drafts
+  directly, add a number-level reconciliation pass (every amount/share/date matched
+  against the quote-verified extracted facts, flag mismatches). Do NOT ship the adapter
+  as a standalone fact source. Also raise max_tokens / add a "summarize-only" constraint
+  for plan-type Items (5.02) to stop truncation.
+
+## Immediate next steps (recommended order: B, then A)
+- **C — DONE (2026-07-10)** — see the "C — human/legal quality check DONE" section
+  above. Bottom line: adapter is a style layer, not a fact source; deploy accordingly.
 - **B — deploy v2 on Thor**: merge (bf16 base + adapter → bf16 merged) on the RTX box
   via `training/llamafactory/merge_8k_v2.yaml`, then re-quantize to NVFP4 with the
   user's own toolchain, serve via vLLM (swap model path), point `.env` `LLM_MODEL`/
