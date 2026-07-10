@@ -48,16 +48,35 @@ matches any source value that rounds to it at P (e.g. source `$5,012,000` → `$
 Exact figures (`$5,000,000`, `1,724,418`, share counts, explicit dates) match exactly.
 Handle line-break-split numbers (`$5.0\nmillion`) and par values (`$0.001`).
 
-## 4. Two-way check & severity
+## 4. Two-way check & severity  (amended 2026-07-10 after the guardrail-impl field test)
+
+**Verdict is driven by RED only.** RED is the zero-tolerance compliance line and the only
+status that blocks a draft from reaching a human as "ready".
 
 | Check | Definition | Severity |
 |---|---|---|
-| **FABRICATION** | a material datum in the DRAFT with no normalized match in the SOURCE | **RED — block** |
-| **OMISSION** | a material datum in the SOURCE, of a kind the disclosure carries, absent from the DRAFT | **AMBER — review** |
+| **FABRICATION** | a material datum in the DRAFT with no normalized match in the SOURCE — **including model-*computed* figures** (e.g. a `$960,000` OID discount = $1.0M × 96%, not stated verbatim in the note). Flag it so a human confirms the derivation. | **RED — block** |
+| **OMISSION** | see ruling below | **AMBER — review-only, NEVER blocks** |
 
-RED blocks the draft from reaching a human as "ready"; AMBER surfaces for review.
-(Presence-only compliance checks like `_compliance_flags` pass fabricated text 5/6 — they
-CANNOT catch format-correct-but-wrong numbers. This value-level check is what does.)
+**Omission ruling (revises the earlier blanket-AMBER definition).** The guardrail-impl
+field test on a number-dense 2.03 note produced **39 AMBER flags**. 8-K disclosure is
+*deliberately selective*, so a blanket "source figure absent from draft" check fights the
+design and drowns the RED signal (alert fatigue endangers the real safety line). Ruling:
+
+- **Omission does NOT contribute to the verdict.** Only RED blocks. (RED behaved
+  correctly in the field test — the single `$960k` RED was a genuine model-computed,
+  non-verbatim figure. Keep that behavior.)
+- **Scope AMBER to the rubric — Option B (target):** raise AMBER only when an omitted
+  figure belongs to a **rubric-designated MUST-disclose category for that Item type**
+  (e.g. 1.01 → aggregate consideration, parties, closing date, assumed debt; 2.03 →
+  principal, rate, maturity; 5.02 → comp amount / share count). Those are the omissions
+  that are actually material; everything else is expected selectivity — do not flag.
+- **Interim — Option A:** if the rubric→category mapping isn't wired yet, ship
+  **RED-only (no AMBER) now** and add scoped AMBER when the mapping exists. RED-only is
+  safe on its own; lawyer sign-off remains the backstop for materiality judgment.
+
+(Presence-only checks like `_compliance_flags` pass fabricated text 5/6 — they CANNOT
+catch format-correct-but-wrong numbers. RED's value-level normalized check is what does.)
 
 ## 5. Output contract
 
