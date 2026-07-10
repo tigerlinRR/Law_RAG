@@ -1,0 +1,10 @@
+### Merge the v2 (safe-target) 8-K LoRA adapter into the original bf16 base.
+model_name_or_path: /mnt/raid/AAA.3A/model
+adapter_name_or_path: /mnt/raid/law_rag_8k/output/adapter-8k-v2
+template: qwen3_5
+trust_remote_code: false
+
+export_dir: /mnt/raid/law_rag_8k/output/adapter-8k-v2-merged
+export_size: 5
+export_device: cpu
+export_legacy_format: false

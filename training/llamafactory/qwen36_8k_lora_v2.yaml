@@ -1,0 +1,62 @@
+### Law_RAG 8-K adapter — v2 (FIX: safe LoRA targets)
+### v1 used lora_target=all -> LoRA landed on linear_attn.in_proj_a/b/z (SSM state
+### projections) and shared_expert_gate, which destabilised free-running generation
+### (teacher-forced loss fine, but generation collapsed to token salad).
+### v2 targets ONLY standard linear layers (self-attn q/k/v/o + MLP gate/up/down),
+### the explicit list Law_RAG's README recommends for this MoE. This EXCLUDES every
+### linear_attn.* projection (named in_proj_*/out_proj) and shared_expert_gate.
+### Base = ORIGINAL Qwen3.6 (NOT the AAA.3A sales-tuned versions).
+
+### model
+model_name_or_path: /mnt/raid/AAA.3A/model
+trust_remote_code: false
+
+### method
+stage: sft
+do_train: true
+finetuning_type: lora
+lora_target: q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj
+lora_rank: 32
+lora_alpha: 64
+lora_dropout: 0.05
+
+freeze_vision_tower: true
+freeze_multi_modal_projector: true
+freeze_language_model: false
+
+### dataset
+dataset: lawrag_8k_train
+eval_dataset: lawrag_8k_val
+dataset_dir: /mnt/raid/law_rag_8k/data
+template: qwen3_5
+cutoff_len: 8192
+max_samples: 1000000
+overwrite_cache: true
+preprocessing_num_workers: 16
+dataloader_num_workers: 4
+
+### output
+output_dir: /mnt/raid/law_rag_8k/output/adapter-8k-v2
+logging_steps: 5
+save_steps: 80
+save_total_limit: 2
+plot_loss: true
+overwrite_output_dir: true
+report_to: none
+
+### train
+per_device_train_batch_size: 1
+gradient_accumulation_steps: 8
+learning_rate: 2.0e-4
+num_train_epochs: 3.0
+lr_scheduler_type: cosine
+warmup_ratio: 0.03
+bf16: true
+gradient_checkpointing: true
+ddp_timeout: 180000000
+seed: 42
+
+### eval
+per_device_eval_batch_size: 1
+eval_strategy: steps
+eval_steps: 40
