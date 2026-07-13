@@ -91,18 +91,31 @@ exact compliance red line we designed the RAG pipeline to avoid.**
     `./.venv/bin/python scripts/serve.py` (run via the harness background mechanism, not
     shell `&`: the sandbox kills shell-backgrounded procs and drops PYTHONPATH).
 
-## Immediate next steps (recommended order: B, then A)
-- **C — DONE (2026-07-10)** — see the "C — human/legal quality check DONE" section
-  above. Bottom line: adapter is a style layer, not a fact source; deploy accordingly.
-- **Guardrail — DONE (2026-07-10)** — RED-only fact reconciliation wired into drafting;
-  scoped AMBER (Option B) is the only follow-up, pending the rubric→keyword mapping.
-- **B — deploy v2 on Thor**: merge (bf16 base + adapter → bf16 merged) on the RTX box
-  via `training/llamafactory/merge_8k_v2.yaml`, then re-quantize to NVFP4 with the
-  user's own toolchain, serve via vLLM (swap model path), point `.env` `LLM_MODEL`/
-  `LLM_BASE_URL` at it. Merge = zero inference cost. See `training/DEPLOY_THOR.md`.
-  Pure 8-K generation is doc-in→out; does NOT need the DB/embed/rerank services.
+## B — DEPLOYED ON THOR, RTX-FREE (2026-07-13)
+v2 8-K adapter is live and serving **100% locally on Thor** — no RTX dependency for
+inference. Full chain verified end-to-end.
+- RTX (its last GPU jobs before decommission) merged bf16 base+adapter and **quantized to
+  NVFP4** (21GB, `adapter-8k-v2-nvfp4/`), plus a `tight_template.jinja` (empty
+  `<think></think>` → no reasoning preamble). GGUF Q4_K_M (~20GB) exists as a portable
+  llama.cpp fallback but loses `guided_json`, so we use NVFP4+vLLM.
+- Transferred 21GB RTX→Thor over Tailscale via `rsync` (SSH_ASKPASS one-time password;
+  no persistent key). Model at `/home/jetson/models/qwen36-8k-nvfp4` (OUTSIDE the repo).
+- Serving: the LLM runs as a **Docker container** (`nvcr.io/nvidia/vllm:26.05-py3`,
+  `--runtime nvidia --network host`), NOT bare vllm. Swapped `lawrag-llm` → `lawrag-llm-8k`
+  (old kept Exited for rollback: `docker start lawrag-llm`). `.env` `LLM_MODEL=qwen3.6-8k`.
+  **Exact cmd + the `processor_config.json` crash-loop gotcha are in `DEPLOY_THOR.md`.**
+- **Verified E2E**: served `qwen3.6-8k` on :8012, no `<think>` leak, `guided_json`
+  structured output works through `draft_8k`, and the fact guardrail correctly BLOCKED the
+  model's fabricated figures (RED) — the deploy proves adapter(style)+guardrail(facts).
+- Remaining tidy-ups: RTX can now be decommissioned (delete its 66GB bf16 master / 69GB
+  bf16 GGUF once satisfied); optionally `docker rm lawrag-llm` after a few days' confidence.
+
+## Later / optional (recommended order: A, scoped-AMBER)
 - **A — scale corpus** to ~3,000+ pairs (~300 more small/mid-cap companies; edit
-  `COMPANIES` in `training/scrape_all_items.py`) and retrain v3, if C/B justify it.
+  `COMPANIES` in `training/scrape_all_items.py`) and retrain v3 — ONLY if a future need
+  justifies it (v3 data-clean retrain was a negative result; v2 is final for now).
+- **Scoped AMBER (guardrail Option B)** — wire the rubric→keyword mapping so omissions of
+  MUST-disclose fields surface as AMBER (still non-blocking). See [[guardrail-red-only]].
 
 ## Key locations
 - **8-K drafting engine**: `lawrag/draft.py` (ITEM_CHECKLISTS, ITEM_RULES w/ materiality

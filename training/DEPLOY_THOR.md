@@ -65,6 +65,36 @@ vllm serve ./qwen36-8k-nvfp4 \
   (Alternatively pass `chat_template_kwargs={"enable_thinking": false}` per request.)
 - `guided_json` works → `draft_8k` structured output is unchanged.
 
+### Actual Thor deployment (VERIFIED 2026-07-13) — it runs as a Docker container
+
+vLLM is NOT on the host; the LLM runs in a container (image `nvcr.io/nvidia/vllm:26.05-py3`,
+`--runtime nvidia --network host`), same as the base was. Model dir lives at
+`/home/jetson/models/qwen36-8k-nvfp4`. The exact command used:
+
+```bash
+sudo docker stop lawrag-llm            # stop the old base container (kept for rollback)
+sudo docker run -d --name lawrag-llm-8k \
+  --runtime nvidia --network host --restart unless-stopped \
+  -v /home/jetson/models/qwen36-8k-nvfp4:/models/qwen36-8k-nvfp4 \
+  -v /home/jetson/.cache/huggingface:/root/.cache/huggingface \
+  nvcr.io/nvidia/vllm:26.05-py3 \
+  vllm serve /models/qwen36-8k-nvfp4 --served-model-name qwen3.6-8k \
+    --chat-template /models/qwen36-8k-nvfp4/tight_template.jinja \
+    --port 8012 --gpu-memory-utilization 0.5 --max-model-len 32768
+```
+Then set `.env` `LLM_MODEL=qwen3.6-8k` (`LLM_BASE_URL` unchanged) and restart the web app.
+Rollback = `docker start lawrag-llm`. Cold start ~4 min (weights ~67s + torch.compile ~98s).
+
+⚠️ **GOTCHA — missing `processor_config.json`:** Qwen3.6 is multimodal, so vLLM tries to
+load an image processor; the quantized dir ships without it and the container crash-loops
+(`OSError: Can't load image processor ... preprocessor_config.json`). Fix: copy
+`processor_config.json` from the base snapshot into the model dir:
+`cp ~/.cache/huggingface/hub/models--unsloth--Qwen3.6-35B-A3B-NVFP4/snapshots/*/processor_config.json /home/jetson/models/qwen36-8k-nvfp4/`.
+(RTX's quant pipeline keeps only text/LLM files; add this one back before serving.)
+
+**Verified end-to-end:** no `<think>` leak, `guided_json` structured output works through
+`draft_8k`, and the fact guardrail correctly flagged the model's fabricated figures (RED).
+
 ### Re-quantizing later (if you ever need to)
 
 modelopt 0.45 + `transformers>=5.x` (5.x is required to load the `qwen3_5_moe` arch;
