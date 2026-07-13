@@ -30,46 +30,61 @@ training/llamafactory/           # reproducibility
 training/eval_ab_lf.py           # the CORRECT A/B eval (uses LLaMA-Factory ChatModel)
 ```
 
-## ⚠️ Key deployment fact
+## ✅ The NVFP4 model is already built (on the RTX 6000)
 
-The adapter is a **bf16 LoRA**. Thor serves the base as **NVFP4** (4-bit). You cannot
-attach a bf16 LoRA to an NVFP4 model directly — you must **merge, then re-quantize**:
+Serving stack = **vLLM / NVFP4** (not GGUF): `lawrag/llm.py` depends on vLLM's
+`guided_json` for `draft_8k`'s structured output, and Thor already runs vLLM+NVFP4.
 
-```
-bf16 base + bf16 adapter  --merge-->  bf16 merged model  --YOUR NVFP4 quant-->  serve
-```
+The 8-K adapter (bf16 LoRA) has been **merged into the base and quantized to NVFP4**
+already, on the RTX box, and validated (coherent post-quant output, correct source
+figures). You do **not** need to merge or quantize on Thor.
 
-Do the merge+quant on a machine with the bf16 base + a GPU (the RTX 6000 box), not on
-Thor. Merging adds **zero** inference cost — same params, same A3B active experts, so
-on Thor it runs at exactly the speed of your current 35B, just with the 8-K skill.
+**Artifact (on RTX, transfer via rsync):** `/mnt/raid/law_rag_8k/output/adapter-8k-v2-nvfp4/`
+(~21 GB, 3 safetensors shards + `hf_quant_config.json` `quant_algo: NVFP4` +
+`tight_template.jinja`). Merging added zero inference cost (same A3B active experts) —
+on Thor it runs at your current 35B's speed, plus the 8-K skill.
 
-### Step 1 — merge (on the RTX 6000 box, LLaMA-Factory)
-
-```bash
-llamafactory-cli export training/llamafactory/merge_8k_v2.yaml
-# -> a full bf16 merged model (edit paths in the yaml first)
-```
-
-### Step 2 — quantize to NVFP4
-
-Run the merged bf16 model through **the same NVFP4 pipeline you used to build the
-base's inference build**. (That toolchain is yours — it's not in this repo.)
-
-### Step 3 — serve on Thor
-
-Point vLLM at the NVFP4 merged model, exactly like your current base:
+### Step 1 — copy the NVFP4 model to Thor
 
 ```bash
-# same vLLM invocation you already use, just swap the model path
-vllm serve <nvfp4-merged-8k>  --served-model-name qwen3.6-8k  --port 8012
+rsync -avP <rtx-user>@<rtx-ip>:/mnt/raid/law_rag_8k/output/adapter-8k-v2-nvfp4/ ./qwen36-8k-nvfp4/
 ```
+
+### Step 2 — serve on Thor (exactly like your current base, swap the path)
+
+```bash
+vllm serve ./qwen36-8k-nvfp4 \
+  --served-model-name qwen3.6-8k \
+  --chat-template ./qwen36-8k-nvfp4/tight_template.jinja \
+  --host 0.0.0.0 --port 8012
+```
+
+- vLLM auto-detects NVFP4 from `hf_quant_config.json` (modelopt format).
+- `--chat-template tight_template.jinja` forces thinking OFF (empty `<think></think>`)
+  so the model emits the tight filing directly instead of a verbose reasoning preamble.
+  (Alternatively pass `chat_template_kwargs={"enable_thinking": false}` per request.)
+- `guided_json` works → `draft_8k` structured output is unchanged.
+
+### Re-quantizing later (if you ever need to)
+
+modelopt 0.45 + `transformers>=5.x` (5.x is required to load the `qwen3_5_moe` arch;
+modelopt 0.43 pins transformers<5 and cannot). Do **not** feed the on-disk
+`adapter-8k-v2-merged/` to `from_pretrained` — LLaMA-Factory's export gave it corrupt
+triple-nested `language_model.language_model.language_model` keys (GGUF-convert and the
+LF loader tolerate it; vanilla transformers reinitializes all weights → garbage). Load
+base + adapter via LLaMA-Factory `ChatModel` then `merge_and_unload`, then quantize.
+modelopt auto-excludes the sensitive modules (linear_attn conv1d/in_proj_a/b, mlp gates,
+lm_head, embed_tokens), which is why the quantized model stays coherent.
+
+**GGUF fallback:** `qwen36-8k-Q4_K_M.gguf` (~20 GB) exists as a portable llama.cpp
+option, but loses vLLM's `guided_json` — prefer NVFP4 above.
 
 ## Wiring into Law_RAG (8-K generation only — no RAG needed)
 
 For the pure "generate an 8-K from a source doc" task you do **not** need the DB /
 embedding / rerank services — it's a doc-in → disclosure-out transform. Minimal setup:
 
-1. Serve the merged-8k model (Step 3).
+1. Serve the NVFP4 model (Step 2 above).
 2. Point `LLM_MODEL` / `LLM_BASE_URL` in `.env` at it.
 3. Use the same system prompt the adapter was trained with:
 
