@@ -451,10 +451,17 @@ async function initGenerate() {
   if (!genItemsLoaded) {
     try {
       const d = await (await fetch("/api/draft-items")).json();
-      const isel = $("#gen-item");
-      isel.innerHTML = "";
-      (d.items || []).forEach((it) =>
-        isel.appendChild(new Option(`Item ${it.item} — ${it.title}`, it.item)));
+      const box = $("#gen-items");
+      box.innerHTML = "";
+      (d.items || []).forEach((it) => {
+        const lab = el("label", "item-check");
+        const cb = el("input");
+        cb.type = "checkbox"; cb.value = it.item;
+        if (it.item === "1.01") cb.checked = true;   // sensible default
+        lab.appendChild(cb);
+        lab.appendChild(el("span", null, ` Item ${it.item} — ${it.title}`));
+        box.appendChild(lab);
+      });
       genItemsLoaded = true;
     } catch (e) { /* leave as-is */ }
   }
@@ -472,15 +479,22 @@ gz.addEventListener("drop", (e) => { if (e.dataTransfer.files.length) generate8k
 async function generate8k(file) {
   const status = $("#genStatus"), report = $("#genReport");
   report.innerHTML = "";
-  const item = $("#gen-item").value, client = $("#gen-client").value;
+  const items = Array.from(document.querySelectorAll("#gen-items input:checked"))
+    .map((c) => c.value);
+  const client = $("#gen-client").value;
+  if (!items.length) {
+    status.className = "status error";
+    status.textContent = "Select at least one 8-K Item to draft.";
+    return;
+  }
   status.className = "status";
   status.innerHTML =
-    `<span class="spinner"></span>Drafting Item ${item} from ${escapeHtml(file.name)} — ` +
-    "extracting facts, finding precedents, drafting… (~1 min)";
+    `<span class="spinner"></span>Drafting Item(s) ${items.join(", ")} from ` +
+    `${escapeHtml(file.name)} — extracting facts, drafting… (~1 min per substantive Item)`;
 
   const fd = new FormData();
   fd.append("file", file);
-  fd.append("item", item);
+  fd.append("items", items.join(","));
   fd.append("client", client);
   try {
     const res = await fetch("/api/generate/8k", { method: "POST", body: fd });
@@ -639,14 +653,23 @@ function renderDraftInto(r, report, meta) {
     fc.appendChild(sec);
   };
 
-  itemSection(r.item, (r.item_title || "") + ".", (sec) => {
-    (r.disclosure || "").split("\n\n").map((s) => s.trim()).filter(Boolean)
-      .forEach((para) => sec.appendChild(el("p", "item-para", para)));
-    if (r._forward_looking_statements) {
-      sec.appendChild(el("div", "item-subhead", "Forward-Looking Statements"));
-      sec.appendChild(el("p", "item-para", r._forward_looking_statements));
-    }
+  const sections = (r._items && r._items.length) ? r._items
+    : [{ item: r.item, item_title: r.item_title, disclosure: r.disclosure }];
+  sections.forEach((s) => {
+    itemSection(s.item, (s.item_title || "") + ".", (sec) => {
+      let paras = (s.disclosure || "").split("\n\n").map((x) => x.trim()).filter(Boolean);
+      if (paras.length &&
+          paras[0].toLowerCase().startsWith(("item " + s.item).toLowerCase()))
+        paras = paras.slice(1);
+      paras.forEach((para) => sec.appendChild(el("p", "item-para", para)));
+    });
   });
+  if (r._forward_looking_statements) {
+    const sec = el("div", "item-sec");
+    sec.appendChild(el("div", "item-subhead", "Forward-Looking Statements"));
+    sec.appendChild(el("p", "item-para", r._forward_looking_statements));
+    fc.appendChild(sec);
+  }
 
   itemSection("9.01", "Financial Statements and Exhibits.", (sec) => {
     sec.appendChild(el("p", "item-para", "(d) Exhibits"));

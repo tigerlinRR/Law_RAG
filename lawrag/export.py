@@ -162,14 +162,27 @@ def filing_date_iso(draft: dict) -> str:
         return "undated"
 
 
-def _disclosure_paragraphs(draft: dict) -> list[str]:
-    """Split the disclosure into paragraphs, dropping a leading 'Item X.XX...'
+def _split_paragraphs(disclosure: str, item: str) -> list[str]:
+    """Split a disclosure string into paragraphs, dropping a leading 'Item X.XX...'
     line if the model repeated the heading we already render separately."""
-    paras = [p.strip() for p in (draft.get("disclosure") or "").split("\n\n") if p.strip()]
-    item = str(draft.get("item", ""))
+    paras = [p.strip() for p in (disclosure or "").split("\n\n") if p.strip()]
     if paras and item and paras[0].lower().startswith(f"item {item}".lower()):
         paras = paras[1:]
     return paras
+
+
+def _disclosure_paragraphs(draft: dict) -> list[str]:
+    return _split_paragraphs(draft.get("disclosure") or "", str(draft.get("item", "")))
+
+
+def _filing_sections(draft: dict) -> list[dict]:
+    """Ordered Item sections that make up the filing body. Uses `_items` (multi-Item)
+    when present; falls back to the single top-level item for older records."""
+    secs = draft.get("_items")
+    if secs:
+        return secs
+    return [{"item": draft.get("item", ""), "item_title": draft.get("item_title", ""),
+             "disclosure": draft.get("disclosure", ""), "cross_ref": False}]
 
 
 def _rule_para(doc, before=0, after=8):
@@ -317,10 +330,12 @@ def draft_to_word(draft: dict) -> bytes:
     doc.add_page_break()
 
     _rule_para(doc, after=8)
-    hdr = doc.add_paragraph()
-    hdr.add_run(f"Item {draft.get('item','')}. {draft.get('item_title','')}.").bold = True
-    for para in _disclosure_paragraphs(draft):
-        _body_para(doc, para)
+    for sec in _filing_sections(draft):
+        hdr = doc.add_paragraph()
+        hdr.paragraph_format.space_before = Pt(6)
+        hdr.add_run(f"Item {sec.get('item','')}. {sec.get('item_title','')}.").bold = True
+        for para in _split_paragraphs(sec.get("disclosure", ""), str(sec.get("item", ""))):
+            _body_para(doc, para)
 
     fls = draft.get("_forward_looking_statements")
     if fls:
@@ -554,7 +569,10 @@ def _draft_html(draft: dict) -> str:
     date = _report_date(draft)
 
     disclosure_html = "".join(
-        f"<p class='body'>{_bold_defined_html(para)}</p>" for para in _disclosure_paragraphs(draft))
+        f"<p class='heading'>Item {_esc(sec.get('item',''))}. {_esc(sec.get('item_title',''))}.</p>"
+        + "".join(f"<p class='body'>{_bold_defined_html(para)}</p>"
+                  for para in _split_paragraphs(sec.get('disclosure',''), str(sec.get('item',''))))
+        for sec in _filing_sections(draft))
     fls = draft.get("_forward_looking_statements")
     fls_html = (f"<p class='heading'>Forward-Looking Statements</p>"
                 f"<p class='body' style='text-indent:0;'>{esc(fls)}</p>" if fls else "")
@@ -655,7 +673,6 @@ def _draft_html(draft: dict) -> str:
 
       <div class="pagebreak page">
         <hr class="pgrule">
-        <p class="heading">Item {esc(draft.get('item',''))}. {esc(draft.get('item_title',''))}.</p>
         {disclosure_html}
         {fls_html}
         <p class="heading">Item 9.01. Financial Statements and Exhibits.</p>

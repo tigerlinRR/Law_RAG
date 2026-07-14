@@ -22,7 +22,7 @@ from pydantic import BaseModel
 
 from . import auth, clients, db, export, generations
 from .config import ROOT
-from .draft import ITEM_TITLES, add_business_context, draft_8k
+from .draft import ITEM_TITLES, add_business_context, draft_8k, draft_filing
 from .ingest import DocMeta, ingest_file
 from .parsers import NeedsOCR
 from .retrieve import Filters, search
@@ -191,27 +191,32 @@ def api_draft_items(user: dict = Depends(current_user)) -> dict:
 
 @app.post("/api/generate/8k", response_model=None)
 async def api_generate_8k(file: UploadFile = File(...), item: str = Form("1.01"),
-                          client: str = Form(""), user: dict = Depends(current_user)):
-    """Draft an 8-K Item disclosure from an uploaded contract and save it to History.
+                          items: str = Form(""), client: str = Form(""),
+                          user: dict = Depends(current_user)):
+    """Draft a (possibly multi-Item) 8-K from an uploaded contract and save to History.
 
-    Precedents and the saved record are scoped to the caller's permitted clients."""
+    `items` = comma-separated Item numbers (e.g. "1.01,3.02"); falls back to `item`.
+    Substantive Items draft from the contract; cross-reference Items (3.02->1.01) are
+    boilerplate. Records are scoped to the caller's permitted clients."""
     allowed = user["allowed_clients"]  # None = admin/unrestricted
     canonical = clients.resolve(client) if client.strip() else None
     # A scoped user may only tag (and later see) a generation for a client they can access.
     if allowed is not None and (canonical is None or canonical not in allowed):
         raise HTTPException(status_code=403, detail="client not in your permitted scope")
-    if item not in ITEM_TITLES:
-        raise HTTPException(status_code=400, detail=f"unsupported item {item}")
+    sel = [i.strip() for i in items.split(",") if i.strip()] or [item]
+    bad = [i for i in sel if i not in ITEM_TITLES]
+    if bad:
+        raise HTTPException(status_code=400, detail=f"unsupported item(s): {', '.join(bad)}")
 
-    auth.log(user["username"], "generate_8k", f"item {item}: {file.filename or ''}")
+    auth.log(user["username"], "generate_8k", f"items {','.join(sel)}: {file.filename or ''}")
     tmpdir = Path(tempfile.mkdtemp(prefix="lawrag_gen_"))
     dest = tmpdir / (file.filename or "upload")
     try:
         with open(dest, "wb") as f:
             shutil.copyfileobj(file.file, f)
-        r = draft_8k(dest, item=item, allowed_clients=allowed)
+        r = draft_filing(dest, sel, allowed_clients=allowed)
         gen_id = generations.save("8k_draft", r, source_name=file.filename,
-                                  client=canonical, item=item,
+                                  client=canonical, item=r.get("item", sel[0]),
                                   created_by=user["username"])
         return {"id": gen_id, "result": r}
     except NeedsOCR:

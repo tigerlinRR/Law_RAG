@@ -485,6 +485,83 @@ def draft_8k(
     return result
 
 
+# --- multi-Item filing assembly ------------------------------------------------
+# Items that conventionally incorporate a companion Item by reference when co-filed
+# (the SAME transaction disclosed under a second Item — e.g. an SPA is both a material
+# agreement (1.01) and an unregistered sale (3.02)). item -> companions in priority.
+_CROSS_REF_TO = {
+    "3.02": ["1.01", "2.03", "2.01"],
+    "2.01": ["1.01"],
+    "2.03": ["1.01"],
+}
+
+
+def _cross_ref_companion(item: str, selected: list[str]) -> str | None:
+    """If `item` should incorporate another selected Item by reference (same
+    transaction), return that companion Item; else None (draft it substantively)."""
+    for comp in _CROSS_REF_TO.get(item, []):
+        if comp in selected and comp != item:
+            return comp
+    return None
+
+
+def _cross_ref_text(item: str, companion: str) -> str:
+    return (f"The information set forth under Item {companion} of this Current Report on "
+            f"Form 8-K is incorporated by reference into this Item {item}.")
+
+
+def _filing_order(items: list[str]) -> list[str]:
+    """Dedupe + sort selected Items into filing order (ascending Item number)."""
+    uniq = list(dict.fromkeys(i for i in items if i in ITEM_TITLES))
+    return sorted(uniq, key=lambda s: [int(x) for x in s.split(".")])
+
+
+def draft_filing(contract_path: str | Path, items: list[str],
+                 allowed_clients: list[str] | None = None) -> dict:
+    """Draft a multi-Item 8-K from ONE source contract.
+
+    Substantive Items are drafted from the contract; recognized cross-reference Items
+    (e.g. 3.02 -> 1.01) get the standard 'incorporated by reference' boilerplate — no
+    LLM, no fabrication risk. Returns one result dict whose top-level fields carry the
+    PRIMARY substantive Item (so History / guardrail banner / review pack keep working),
+    plus `_items`: the ordered list of {item, item_title, disclosure, cross_ref} sections
+    that form the filing body. Guardrails from all substantive Items are merged."""
+    items = _filing_order(items) or ["1.01"]
+    sections: list[dict] = []
+    substantive: list[tuple[str, dict]] = []
+    for it in items:
+        title = ITEM_TITLES.get(it, "")
+        comp = _cross_ref_companion(it, items)
+        if comp:
+            sections.append({"item": it, "item_title": title,
+                             "disclosure": _cross_ref_text(it, comp), "cross_ref": True})
+        else:
+            r = draft_8k(contract_path, item=it, allowed_clients=allowed_clients)
+            substantive.append((it, r))
+            sections.append({"item": it, "item_title": r.get("item_title", title),
+                             "disclosure": r.get("disclosure", ""), "cross_ref": False})
+    if not substantive:  # degenerate (only cross-ref Items selected): draft the first
+        it = items[0]
+        r = draft_8k(contract_path, item=it, allowed_clients=allowed_clients)
+        substantive.append((it, r))
+        for s in sections:
+            if s["item"] == it:
+                s["disclosure"], s["cross_ref"] = r.get("disclosure", ""), False
+
+    primary_item, primary = substantive[0]
+    result = dict(primary)
+    merged, blocked = [], False
+    for _, r in substantive:
+        g = r.get("_guardrail") or {}
+        merged.extend(g.get("items", []))
+        blocked = blocked or g.get("verdict") == "blocked"
+    result["_guardrail"] = {"verdict": "blocked" if blocked else "clean", "items": merged}
+    result["_items"] = sections
+    result["item"] = primary_item
+    result["item_title"] = ITEM_TITLES.get(primary_item, "")
+    return result
+
+
 _BUSINESS_CONTEXT_SCHEMA = {
     "type": "object",
     "properties": {"paragraph": {"type": "string"}, "added_text": {"type": "string"}},
