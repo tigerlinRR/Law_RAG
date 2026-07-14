@@ -187,6 +187,23 @@ memory of Richtech's own past filings). So drafting is no longer LLM-written:
   completeness/reliability** (reliably capture the aggregate, a clean agreement name),
   NOT trusting the model to write facts.
 
+## Drafting modes finalized — HYBRID is the default (2026-07-14, user chose "B")
+`draft_8k(mode=...)` now has three modes (replacing the earlier `fact_locked` bool):
+- **`hybrid` (DEFAULT):** model drafts in its 8-K style → `draft._lock_figures` replaces
+  every figure NOT grounded in source (or a valid derivation) with `[NOT IN SOURCE —
+  CONFIRM]`. No imagined NUMBER survives; `result._blanked_figures` lists them; web banner
+  + re-verify surface/track them. Keeps fluent prose. **LIMIT: locks numbers only** — a
+  non-numeric fabrication (e.g. the model's "registered direct offering / Form S-3 (File
+  No. 333-286333)" story, or an invented warrants paragraph) still needs human review.
+- **`assemble`:** deterministic assembly from verified facts; model writes no prose →
+  ZERO invention (number or narrative), but templated/thin. The only fully-safe-against-
+  narrative option.
+- **`llm`:** raw, legacy.
+Also fixed the (c) material-relationship counterparty to use the EXTRACTED party (was
+mis-picking "the SEC" from the model's defined terms). Note for future: the standing
+tension is hybrid(nice prose, numbers safe, narrative not) vs assemble(safe, thin) — the
+deep fix for both is extraction completeness + (later) a narrative-claim check.
+
 ## Later / optional (recommended order: A, scoped-AMBER)
 - **A — scale corpus** to ~3,000+ pairs (~300 more small/mid-cap companies; edit
   `COMPANIES` in `training/scrape_all_items.py`) and retrain v3 — ONLY if a future need
