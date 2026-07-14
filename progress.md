@@ -156,6 +156,16 @@ $38,675,000 aggregate but NO total share count:
   BLOCKED. Derivation only helps when the model states the anchored value; it cannot
   rescue a mangled draft. The guardrail (detect → human fix) remains the guarantee; the
   model is never trusted for facts.
+- **In-app edit + re-verify (this is the answer to "how do I clear the banner"):** each
+  substantive Item disclosure is editable in the web view; a "Re-check facts" button POSTs
+  the edited text to `POST /api/generations/{id}/reverify`, which re-runs the guardrail
+  against the stored `_source_text` and re-saves → the banner updates live. `draft_8k`
+  now stores `_source_text` + `_derived_values` so no re-parse is needed. The guardrail
+  also grounds a figure derived from two figures that are BOTH source-matched AND stated
+  in the draft (`guardrail._derive_from_grounded`, transparent/low-coincidence). Verified:
+  blocked draft → edit to correct figures → re-check → `needs_review` with 8,500,000 shown
+  as `derived = $38,675,000 ÷ $4.55` (no longer blocked). So the lawyer fixes the flagged
+  cell and clears the block in-app.
 
 ## Later / optional (recommended order: A, scoped-AMBER)
 - **A — scale corpus** to ~3,000+ pairs (~300 more small/mid-cap companies; edit

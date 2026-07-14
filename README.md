@@ -205,6 +205,11 @@ concerns: RAG = facts, adapter = style, guardrail = the compliance red line.
      MUST-disclose fields is a pending enhancement).
    Verdict: `blocked` (any fabrication) / `needs_review` (derived or omitted, non-
    blocking) / `clean`.
+   - **Fix & re-check in-app.** Each substantive Item's disclosure is editable in the web
+     view; a **"Re-check facts"** button re-runs the guardrail on the edited text
+     (`POST /api/generations/{id}/reverify`, against the stored source) and updates the
+     banner live — so a reviewer corrects a flagged figure and clears the block without
+     leaving the app.
 5. **Export — two separate files, never combined:**
    - The **8-K filing** (`draft_to_word` / `draft_to_pdf`): a clean document that
      mirrors an actual Form 8-K — SEC cover page (registrant/EIN/address,
