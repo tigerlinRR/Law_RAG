@@ -110,6 +110,33 @@ inference. Full chain verified end-to-end.
 - Remaining tidy-ups: RTX can now be decommissioned (delete its 66GB bf16 master / 69GB
   bf16 GGUF once satisfied); optionally `docker rm lawrag-llm` after a few days' confidence.
 
+## Post-deploy hardening + multi-Item (2026-07-13/14)
+Shook out on the live adapter against a real Richtech SPA (accession 0001213900-26-009823):
+- **Structured-output truncation fixed** (`Unterminated string` on generate): the adapter
+  is far more verbose than the base and overran `max_tokens`, truncating guided-JSON
+  mid-string. Bounded the output — `maxLength`/`maxItems` on `REVIEW_SCHEMA` (extraction)
+  and `DRAFT_SCHEMA` (drafting) + terseness in the extraction prompt + drafting cap
+  4096→8192. Both extraction and drafting now complete within the 32k context.
+- **Precedent fact-leakage fixed → `draft_8k` `n_precedents` now defaults to 0.** The
+  in-prompt precedents were redundant (style is in the adapter's weights) and the model
+  copied their FACTS (share counts, file numbers, an S-3-registered story) into the draft,
+  contradicting the source contract. Off by default kills the leak and means pure
+  generation needs no DB/retrieval. Confirmed: leak gone, correctly reads the deal as a
+  private placement.
+- **Residual figure fabrication is the inherent RAG limit, not a bug**: this SPA states
+  `$4.55/share` + `$38,675,000` but NOT a total share count (8,500,000 is derivable, not
+  written) — so the model invents a share count. The **guardrail flags it RED for human
+  fill**; no training fixes this. Workflow = tool gives a grounded skeleton, the guardrail's
+  RED list tells counsel which figures to supply/confirm.
+- **Multi-Item drafting (Plan A) shipped** — real 8-Ks bundle several Items. `draft.draft_filing(contract, items)`
+  drafts substantive Items from the contract and auto-fills recognized cross-reference
+  Items (3.02→1.01, 2.01/2.03→1.01) with the "incorporated by reference" boilerplate
+  (no LLM). Result carries the primary Item at top level + `_items[]` (ordered sections);
+  guardrails merged. Web Generate tab is now multi-select checkboxes; `/api/generate/8k`
+  takes `items` (comma-sep); export (Word/PDF) renders every section. Verified E2E:
+  `1.01,3.02` → filing with both Items. **Item 8.01 (press releases) still needs those
+  docs as input = Plan B (not built).**
+
 ## Later / optional (recommended order: A, scoped-AMBER)
 - **A — scale corpus** to ~3,000+ pairs (~300 more small/mid-cap companies; edit
   `COMPANIES` in `training/scrape_all_items.py`) and retrain v3 — ONLY if a future need

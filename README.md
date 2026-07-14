@@ -145,15 +145,22 @@ tailnet) and optionally SSO.
 
 ## 8-K drafting (experiment)
 
-A first test of RAG-grounded drafting — deliberately **not** a fine-tuned model.
-SEC disclosures are fact-critical, so this stays retrieval + extraction:
+RAG-grounded drafting. **Facts always come from the source contract via retrieval +
+extraction — never from model memory.** A fine-tuned **style** adapter (see below,
+now deployed) shapes *how* the disclosure reads; a deterministic **fact guardrail**
+(below) is the safety net that blocks any figure not grounded in the source. Split of
+concerns: RAG = facts, adapter = style, guardrail = the compliance red line.
 
 1. **Extract facts** from the source contract with the existing due-diligence
    engine (same clause checklist, verbatim quotes).
-2. **Retrieve precedents** — prior 8-K filings that report the *same Item number*
-   already in the library (`documents.meta.filing_items`, a JSONB array — a real
-   8-K commonly reports several Items at once, matched by containment, not exact
-   equality), used **only** for structure and tone, never as a source of facts.
+2. **Precedents are OFF by default** (`draft_8k` `n_precedents=0`). The style adapter
+   already carries filing structure/tone in its weights, so in-prompt precedents are
+   redundant — and worse, the model copied their *facts* (share counts, file numbers,
+   registered-vs-private-placement) into the draft, contradicting the source. Retrieval
+   of same-Item precedents (`documents.meta.filing_items`, a JSONB array matched by
+   containment) is still available (`n_precedents>0`) for the un-adapted base model, but
+   the deployed adapter runs precedent-free — which also means pure generation needs no
+   DB/embed/rerank.
 3. **Draft** the Item disclosure with the LLM as a real 8-K would read: a
    **brief, selective** description of the *material* terms in one to three
    paragraphs, not a comprehensive summary — standard/boilerplate provisions are
@@ -180,7 +187,17 @@ SEC disclosures are fact-critical, so this stays retrieval + extraction:
      QC at a glance. (The full framework is Item-1.01-specific today, matching
      counsel's guidance; other Items get the general checks until per-Item
      guidance is added.)
-4. **Export — two separate files, never combined:**
+4. **Reconcile every figure (fact guardrail).** After drafting, `lawrag.guardrail`
+   normalizes then reconciles each material datum (currency, share/unit counts, %,
+   dates, parties) in the draft against the source contract — pure local text, no DB.
+   A figure in the draft with no match in the source — **including a model-*computed*
+   one** (e.g. a share count derived from an invented per-share price) — is **RED and
+   blocks** the draft from being treated as "ready"; the verdict + flagged figures show
+   as a one-line banner on screen and in full in the review pack. This catches
+   format-correct-but-wrong numbers that the presence-only `_compliance` checks miss.
+   (Omissions are AMBER, review-only, never blocking; scoping them to the rubric's
+   MUST-disclose fields is a pending enhancement.)
+5. **Export — two separate files, never combined:**
    - The **8-K filing** (`draft_to_word` / `draft_to_pdf`): a clean document that
      mirrors an actual Form 8-K — SEC cover page (registrant/EIN/address,
      checkboxes, securities table), the Item disclosure, an Item 9.01 exhibit
@@ -193,6 +210,15 @@ SEC disclosures are fact-critical, so this stays retrieval + extraction:
    Web (History tab) and CLI (`--docx/--pdf` for the filing, `--review-docx/
    --review-pdf` for the pack) expose both; the API serves the filing at
    `/export/word|pdf` and the pack at `/export/review-word|review-pdf`.
+
+**Multiple Items in one filing.** Real 8-Ks bundle several Items, so the Generate tab
+takes a **multi-select** (and the API a comma-separated `items`). `draft.draft_filing`
+drafts each *substantive* Item from the contract and auto-fills recognized
+*cross-reference* Items (e.g. 3.02 → 1.01, 2.01/2.03 → 1.01) with the standard
+"incorporated by reference into this Item X" boilerplate (no LLM, no fabrication). All
+sections render into one filing (cover → each Item → 9.01 → signature). Items that need
+documents outside the contract — e.g. **Item 8.01** press releases, or extra exhibits —
+are not drafted (they aren't in the source); supply those separately.
 
 ```bash
 # Tag historical 8-Ks with their Item number(s) at ingest (auto-detected, or manual
@@ -363,19 +389,26 @@ source document was on hand); they draft the same way once a real document is
 supplied. **Next: a lawyer reviews the drafts** — this stays an experiment
 requiring sign-off, and RAG-grounded, never fine-tuned.
 
-### Experimental: 8-K style adapter (`training/`)
+### 8-K style adapter (`training/`) — trained, validated, DEPLOYED
 
-A separate, optional track explores a **LoRA adapter** that teaches an open base
-model (`Qwen3.6-35B-A3B`) 8-K *style, structure, and materiality selectivity* —
-never facts, which always stay RAG-grounded. `training/` is a self-contained
-package meant to run on a proper training GPU (RTX 6000 / 5090), not this host:
-a ~2,174-pair dataset built from **public** EDGAR filings of ~90 companies
-(`{instruction, source document, real Item disclosure}`), a QLoRA training script,
-and an A/B eval (adapter on vs off, on held-out companies). This is the first block
-of a "shared base + one adapter per filing type" design (8-K now; S-8 / 10-K later),
-and it stays gated behind lawyer sign-off like everything else. See
-`training/README.md`. The adapter's value over plain RAG + the materiality rubric is
-still to be validated by that A/B before any scale-up.
+A **LoRA adapter** teaches the base model (`Qwen3.6-35B-A3B`) 8-K *style, structure,
+and materiality selectivity* — never facts, which always stay RAG-grounded + guarded.
+`training/` is a self-contained package (built/trained on an RTX 6000, not this host):
+a ~2,174-pair dataset from **public** EDGAR filings of ~90 companies (`{instruction,
+source document, real Item disclosure}`), the LLaMA-Factory configs, and an A/B eval.
+
+**A/B (held-out companies, adapter off vs on): ROUGE-L 0.246→0.464, number-recall
+0.577→0.675, output tightened 2430→1098 chars** — clear win on style; the base rambles
+and leaks `<think>`. Trained as bf16 LoRA (r32/α64, "safe" target set; `lora_target=all`
+collapses this hybrid model's SSM/expert-gate — do NOT use). A data-clean **v3 did not
+beat v2** and confirmed fabrication is structural, not data-fixable → **v2 is final**.
+
+**Deployed on Thor (RTX-free):** the merged model, quantized to **NVFP4**, serves via a
+vLLM Docker container (`lawrag-llm-8k`, :8012) with a tight chat template that forces
+`<think>` off. It is used for *style*; the **fact guardrail** (above) enforces facts.
+This is the first block of a "shared base + one adapter per filing type" design
+(8-K done; S-8 / 10-K later). Full deploy recipe + gotchas: `training/DEPLOY_THOR.md`.
+Every draft still requires lawyer sign-off.
 
 ## Layout
 
