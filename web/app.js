@@ -677,13 +677,14 @@ function renderDraftInto(r, report, meta) {
         editors[s.item] = ta;
       }
     });
+    // FLS legend belongs right after the Item it relates to (the primary), not last.
+    if (r._forward_looking_statements && s.item === r.item) {
+      const fsec = el("div", "item-sec");
+      fsec.appendChild(el("div", "item-subhead", "Forward-Looking Statements"));
+      fsec.appendChild(el("p", "item-para", r._forward_looking_statements));
+      fc.appendChild(fsec);
+    }
   });
-  if (r._forward_looking_statements) {
-    const sec = el("div", "item-sec");
-    sec.appendChild(el("div", "item-subhead", "Forward-Looking Statements"));
-    sec.appendChild(el("p", "item-para", r._forward_looking_statements));
-    fc.appendChild(sec);
-  }
 
   itemSection("9.01", "Financial Statements and Exhibits.", (sec) => {
     sec.appendChild(el("p", "item-para", "(d) Exhibits"));

@@ -24,7 +24,8 @@ from decimal import Decimal
 
 from . import auth, clients, db, export, generations, guardrail
 from .config import ROOT
-from .draft import (ITEM_TITLES, _compliance_flags, add_business_context, draft_8k,
+from .draft import (ITEM_TITLES, _FORWARD_LOOKING_STATEMENTS, _compliance_flags,
+                    _needs_forward_looking_statements, add_business_context, draft_8k,
                     draft_filing)
 from .ingest import DocMeta, ingest_file
 from .parsers import NeedsOCR
@@ -280,6 +281,12 @@ def api_reverify(gen_id: int, req: ReverifyReq, user: dict = Depends(current_use
                                                src, derived=derived)
     result["_compliance"] = _compliance_flags(result.get("item", ""),
                                               result.get("disclosure", ""))
+    # Recompute the FLS legend against the edited text: if the reviewer removed the
+    # forward-looking language, the legend should disappear (it's not needed on every 8-K).
+    if _needs_forward_looking_statements(result.get("disclosure", "")):
+        result["_forward_looking_statements"] = _FORWARD_LOOKING_STATEMENTS
+    else:
+        result.pop("_forward_looking_statements", None)
     generations.update_result(gen_id, result)
     auth.log(user["username"], "reverify", f"generation {gen_id}")
     return {"id": gen_id, "result": result}

@@ -330,19 +330,19 @@ def draft_to_word(draft: dict) -> bytes:
     doc.add_page_break()
 
     _rule_para(doc, after=8)
+    fls = draft.get("_forward_looking_statements")
+    primary = str(draft.get("item", ""))  # FLS belongs right after the item it relates to
     for sec in _filing_sections(draft):
         hdr = doc.add_paragraph()
         hdr.paragraph_format.space_before = Pt(6)
         hdr.add_run(f"Item {sec.get('item','')}. {sec.get('item_title','')}.").bold = True
         for para in _split_paragraphs(sec.get("disclosure", ""), str(sec.get("item", ""))):
             _body_para(doc, para)
-
-    fls = draft.get("_forward_looking_statements")
-    if fls:
-        fp = doc.add_paragraph()
-        fp.paragraph_format.space_before = Pt(6)
-        fp.add_run("Forward-Looking Statements").bold = True
-        _body_para(doc, fls, indent=False, bold_terms=False)
+        if fls and str(sec.get("item", "")) == primary:
+            fp = doc.add_paragraph()
+            fp.paragraph_format.space_before = Pt(6)
+            fp.add_run("Forward-Looking Statements").bold = True
+            _body_para(doc, fls, indent=False, bold_terms=False)
 
     doc.add_paragraph().add_run("Item 9.01. Financial Statements and Exhibits.").bold = True
     ital = doc.add_paragraph()
@@ -576,14 +576,22 @@ def _draft_html(draft: dict) -> str:
     r = REGISTRANT
     date = _report_date(draft)
 
-    disclosure_html = "".join(
-        f"<p class='heading'>Item {_esc(sec.get('item',''))}. {_esc(sec.get('item_title',''))}.</p>"
-        + "".join(f"<p class='body'>{_bold_defined_html(para)}</p>"
-                  for para in _split_paragraphs(sec.get('disclosure',''), str(sec.get('item',''))))
-        for sec in _filing_sections(draft))
     fls = draft.get("_forward_looking_statements")
-    fls_html = (f"<p class='heading'>Forward-Looking Statements</p>"
-                f"<p class='body' style='text-indent:0;'>{esc(fls)}</p>" if fls else "")
+    primary = str(draft.get("item", ""))  # FLS belongs right after the item it relates to
+
+    def _sec_html(sec):
+        html = (f"<p class='heading'>Item {_esc(sec.get('item',''))}. "
+                f"{_esc(sec.get('item_title',''))}.</p>"
+                + "".join(f"<p class='body'>{_bold_defined_html(para)}</p>"
+                          for para in _split_paragraphs(sec.get('disclosure', ''),
+                                                        str(sec.get('item', '')))))
+        if fls and str(sec.get('item', '')) == primary:
+            html += (f"<p class='heading'>Forward-Looking Statements</p>"
+                     f"<p class='body' style='text-indent:0;'>{esc(fls)}</p>")
+        return html
+
+    disclosure_html = "".join(_sec_html(sec) for sec in _filing_sections(draft))
+    fls_html = ""  # inlined after the primary Item above (not appended at the end)
     sec_rows = "".join(
         f"<tr><td class='left'>{esc(cls)}</td><td>{esc(sym)}</td><td>{esc(exch)}</td></tr>"
         for cls, sym, exch in r["securities"]
