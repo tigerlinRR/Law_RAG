@@ -421,6 +421,92 @@ def _derive_share_count(review: dict) -> None:
     review.setdefault("_derived", []).append((Decimal(nearest), desc))
 
 
+def _num_only(s: str) -> str:
+    m = re.search(r"[\d,]+(?:\.\d+)?", s or "")
+    return m.group(0) if m else (s or "").strip()
+
+
+def _assemble_disclosure(item: str, review: dict, item_title: str) -> tuple[str, list[dict]]:
+    """FACT-LOCKED drafting: build the disclosure deterministically from the VERIFIED
+    extracted clauses — the model never writes a figure, so it cannot imagine one. Prose
+    is templated (a lawyer polishes wording, not facts). Every stated fact is cited to its
+    verbatim source quote. Missing facts are simply omitted, never invented."""
+    def val(name: str) -> str:
+        c = _find_clause(review, name)
+        v = (c or {}).get("value", "").strip()
+        return "" if v.lower() in ("", "not found") else v
+
+    facts: list[dict] = []
+    def cite(name: str, fact_text: str = "") -> None:
+        c = _find_clause(review, name)
+        q = (c or {}).get("quote", "")
+        if q:
+            facts.append({"fact": fact_text or (c or {}).get("value", ""), "source_quote": q})
+
+    parties = [p for p in review.get("parties", []) if p.strip()]
+    company = parties[0] if parties else "the Company"
+    counterparty = parties[1] if len(parties) > 1 else ""
+    date = val("Effective Date / Signing Date")
+    raw_type = (review.get("doc_type") or "").strip()
+    agreement = raw_type if any(k in raw_type.lower() for k in
+                                ("agreement", "note", "plan", "lease", "indenture", "purchase")) \
+        else "definitive agreement"
+    term = "Agreement"  # defined term used in the qualifier + material-relationship sentence
+
+    s = (f"On {date}, " if date else "") + \
+        f"{company} (the “Company”) entered into a {agreement} (the “{term}”)"
+    if counterparty:
+        s += f" with {counterparty}"
+
+    # securities sale: number of shares (extracted or derived) / class / price / aggregate
+    shares = _num_only(val("Number of Shares or Units Issued"))
+    if not shares and review.get("_derived"):
+        shares = f"{review['_derived'][0][0]:,}"
+    cls, pps, agg = (val("Securities Type / Class (and par value)"),
+                     val("Price per Share / Unit"), val("Purchase Price / Consideration"))
+    asset = val("Asset(s) Involved (description, size, location, quantity)")
+    principal, rate, maturity = (val("Financing Amount / Principal"),
+                                 val("Interest Rate / Discount"), val("Maturity / Term / Duration"))
+
+    if shares or pps:
+        s += ", pursuant to which the Company agreed to issue and sell"
+        s += f" {shares} shares" if shares else " shares"
+        if cls:
+            s += f" of {cls}"
+        if pps:
+            s += f" at a purchase price of {pps} per share"
+        if agg:
+            s += f", for aggregate gross proceeds of {agg}"
+    elif asset:
+        s += f" to acquire {asset}"
+        if agg:
+            s += f" for a purchase price of {agg}"
+    elif agg:
+        s += f" providing for aggregate consideration of {agg}"
+    s += "."
+    for n in ("Effective Date / Signing Date", "Securities Type / Class (and par value)",
+              "Price per Share / Unit", "Purchase Price / Consideration",
+              "Asset(s) Involved (description, size, location, quantity)"):
+        cite(n)
+    if shares:
+        c = _find_clause(review, "Number of Shares or Units Issued")
+        if c and c.get("quote"):
+            cite("Number of Shares or Units Issued")
+    sentences = [s]
+
+    if principal or rate or maturity:  # note / financing obligation
+        bits = []
+        if principal:
+            bits.append(f"a principal amount of {principal}"); cite("Financing Amount / Principal")
+        if rate:
+            bits.append(f"interest at {rate}"); cite("Interest Rate / Discount")
+        if maturity:
+            bits.append(f"a maturity of {maturity}"); cite("Maturity / Term / Duration")
+        sentences.append(f"The {agreement} provides for " + ", ".join(bits) + ".")
+
+    return "\n\n".join(sentences), facts
+
+
 def _facts_block(review: dict) -> str:
     lines = [
         f"Parties: {', '.join(review.get('parties', [])) or '[unknown]'}",
@@ -475,6 +561,7 @@ def draft_8k(
     n_precedents: int = 0,
     allowed_clients: list[str] | None = None,
     exclude_document_ids: list[int] | None = None,
+    fact_locked: bool = True,
 ) -> dict:
     """Draft an 8-K Item disclosure for `contract_path`, grounded in facts extracted
     from that contract.
@@ -493,30 +580,34 @@ def draft_8k(
     if item in ("1.01", "3.02"):  # securities sales: supply the derived share count
         _derive_share_count(review)
 
-    precedent_texts: list[str] = []
     precedent_citations: list[str] = []
-    if n_precedents > 0:  # opt-in only; skipping avoids needing the DB/retrieval stack
-        hits = retrieve.search(
-            f"8-K Item {item} {item_title}",
-            filters=retrieve.Filters(doc_type="8-K"),
-            top_k=n_precedents * 4,  # a few chunks per doc; grouped back into docs below
-            allowed_clients=allowed_clients,
-            meta_filters={"filing_items": item},
-            exclude_document_ids=exclude_document_ids,
-            use_rerank=False,  # exact-match by item; RRF order is fine
+    if fact_locked:
+        # FACT-LOCKED (default): assemble the disclosure from verified extracted facts.
+        # The model NEVER writes a figure, so it cannot imagine one. No LLM drafting call.
+        disc, facts = _assemble_disclosure(item, review, item_title)
+        result = {"disclosure": disc, "facts_used": facts}
+    else:
+        precedent_texts: list[str] = []
+        if n_precedents > 0:  # opt-in; skipping avoids needing the DB/retrieval stack
+            hits = retrieve.search(
+                f"8-K Item {item} {item_title}",
+                filters=retrieve.Filters(doc_type="8-K"),
+                top_k=n_precedents * 4,
+                allowed_clients=allowed_clients,
+                meta_filters={"filing_items": item},
+                exclude_document_ids=exclude_document_ids,
+                use_rerank=False,
+            )
+            by_doc: dict[int, list] = {}
+            for h in hits:
+                by_doc.setdefault(h.document_id, []).append(h)
+            precedent_docs = list(by_doc.values())[:n_precedents]
+            precedent_texts = ["\n".join(c.content for c in chs) for chs in precedent_docs]
+            precedent_citations = [chs[0].citation() for chs in precedent_docs]
+        result = llm.chat_json(
+            _SYSTEM, _user_prompt(item, item_title, review, precedent_texts),
+            DRAFT_SCHEMA, max_tokens=8192,
         )
-        by_doc: dict[int, list] = {}
-        for h in hits:
-            by_doc.setdefault(h.document_id, []).append(h)
-        precedent_docs = list(by_doc.values())[:n_precedents]
-        precedent_texts = ["\n".join(c.content for c in chs) for chs in precedent_docs]
-        precedent_citations = [chs[0].citation() for chs in precedent_docs]
-
-    result = llm.chat_json(
-        _SYSTEM, _user_prompt(item, item_title, review, precedent_texts),
-        DRAFT_SCHEMA, max_tokens=8192,  # drafting prompt is small; give the verbose
-                                        # 8-K model room so the JSON isn't truncated
-    )
     # Item/title are known inputs, not model output — set them deterministically
     # rather than trust free-form generation (which sometimes echoes precedent text).
     result["item"] = item
