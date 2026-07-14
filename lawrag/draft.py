@@ -52,6 +52,11 @@ ITEM_CHECKLISTS: dict[str, list[str]] = {
         # always disclosed when present.
         "Parties", "Effective Date / Signing Date", "Nature of Transaction",
         "Asset(s) Involved (description, size, location, quantity)",
+        # For securities sales: capture the per-unit price and count so the drafter
+        # states the contract's OWN figures instead of inventing/deriving them.
+        "Securities Type / Class (and par value)",
+        "Number of Shares or Units Issued",
+        "Price per Share / Unit",
         "Purchase Price / Consideration", "Deposit / Earnest Money",
         "Financing Amount / Principal", "Interest Rate / Discount",
         "Maturity / Term / Duration", "Payment / Repayment Terms",
@@ -217,9 +222,14 @@ _SYSTEM = (
     "a copy of which is filed as Exhibit 10.1 to this Current Report on Form 8-K and "
     "is incorporated herein by reference.'\n"
     "5. NEVER reuse a precedent's facts (names, dates, amounts, counterparties) — every "
-    "fact must come from the source contract facts. If a term the disclosure would "
-    "normally state is missing from the contract facts, write '[NOT STATED IN "
-    "CONTRACT]' rather than inventing it.\n"
+    "fact must come from the source contract facts. Use figures EXACTLY as they appear "
+    "in the extracted facts. Do NOT compute, derive, infer, or estimate any number — "
+    "e.g. never divide an aggregate price by a per-share price to get a share count, "
+    "never total up parts, never guess a par value. If a figure the disclosure would "
+    "normally state (share count, price per share, par value, etc.) is not present in "
+    "the extracted facts, OMIT it or write '[NOT STATED IN CONTRACT]' — never calculate "
+    "or invent it. A missing figure that is flagged is safe; a computed or guessed one "
+    "is a compliance error.\n"
     "6. For each factual statement you DO disclose, add one entry to 'facts_used': "
     "'fact' is that statement AS WORDED IN YOUR DISCLOSURE (a short sentence or "
     "clause copied from what you wrote, NOT a category label like 'Parties' or "
