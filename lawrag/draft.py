@@ -534,6 +534,10 @@ def draft_8k(
     # and flags material omissions (AMBER) before a human treats the draft as ready.
     result["_guardrail"] = guardrail.reconcile(
         result["disclosure"], full_text, derived=review.get("_derived"))
+    # Keep the source text + anchored derivations so an edited draft can be re-verified
+    # in-app (POST /reverify) without re-parsing the contract.
+    result["_source_text"] = full_text
+    result["_derived_values"] = [[str(v), d] for v, d in review.get("_derived", [])]
     for f in result.get("facts_used", []):
         f["verified"] = verify_quote(f.get("source_quote", ""), full_text)
     result["_source_contract"] = Path(contract_path).name

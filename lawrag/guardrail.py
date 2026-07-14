@@ -237,6 +237,29 @@ def _match_derived(d: Datum, derived: list | None) -> str | None:
     return None
 
 
+def _derive_from_grounded(d: Datum, grounded: list[Datum]) -> str | None:
+    """Derive `d` from two figures that are BOTH source-grounded AND stated in the draft
+    (`grounded`). Lower-coincidence and transparent than a blind source-pair search: the
+    operands are visible in the draft, so the shown '= A ÷ B' is self-checking. Lets a
+    human-corrected draft (e.g. edited to '8,500,000 shares … $4.55 … $38,675,000') pass
+    once the count equals an arithmetic combination of the figures the draft itself uses."""
+    if d.kind not in ("currency", "count"):
+        return None
+    tol = abs(d.canonical) * Decimal("0.005") + max(d.step, Decimal(1)) / 2
+    nums = [x for x in grounded if x.canonical != 0 and x is not d]
+    for a in nums:
+        for b in nums:
+            if a is b or b.canonical == 0:
+                continue
+            if abs(a.canonical) >= 1000 and abs(d.canonical - a.canonical / b.canonical) <= tol:
+                return f"= {a.raw} ÷ {b.raw}"
+    for i, a in enumerate(nums):
+        for b in nums[i + 1:]:
+            if abs(d.canonical) >= 1000 and abs(d.canonical - a.canonical * b.canonical) <= tol:
+                return f"= {a.raw} × {b.raw}"
+    return None
+
+
 # --- public API ---------------------------------------------------------------
 def reconcile(draft_text: str, source_text: str,
               must_disclose: set[str] | None = None,
@@ -267,16 +290,22 @@ def reconcile(draft_text: str, source_text: str,
     items: list[dict] = []
     blocked = review = False
 
+    # Pass 1: classify direct source matches (so derivation can use grounded draft figures).
+    classified = []  # (datum, matched, snippet)
     for d in d_data:
         hit = _find(d, s_data)
         matched = hit is not None
         if not matched and d.kind == "party" and _party_in_source_text(d, source_low):
             matched = True
-        snippet = hit.ctx if hit else None
+        classified.append((d, matched, hit.ctx if hit else None))
+    grounded_nums = [d for d, m, _ in classified if m and d.kind in ("currency", "count")]
+
+    # Pass 2: unmatched figures may still be grounded by an arithmetic derivation.
+    for d, matched, snippet in classified:
         if matched:
             status = "matched"
         else:
-            deriv = _match_derived(d, derived)  # a labeled arithmetic consequence of source?
+            deriv = _match_derived(d, derived) or _derive_from_grounded(d, grounded_nums)
             if deriv:
                 status, snippet, review = "derived", deriv, True
             else:

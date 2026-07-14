@@ -657,15 +657,25 @@ function renderDraftInto(r, report, meta) {
     fc.appendChild(sec);
   };
 
+  const editors = {};  // substantive item -> textarea (edit a flagged figure, then re-check)
   const sections = (r._items && r._items.length) ? r._items
-    : [{ item: r.item, item_title: r.item_title, disclosure: r.disclosure }];
+    : [{ item: r.item, item_title: r.item_title, disclosure: r.disclosure, cross_ref: false }];
   sections.forEach((s) => {
     itemSection(s.item, (s.item_title || "") + ".", (sec) => {
       let paras = (s.disclosure || "").split("\n\n").map((x) => x.trim()).filter(Boolean);
       if (paras.length &&
           paras[0].toLowerCase().startsWith(("item " + s.item).toLowerCase()))
         paras = paras.slice(1);
-      paras.forEach((para) => sec.appendChild(el("p", "item-para", para)));
+      if (s.cross_ref) {  // boilerplate cross-reference — read-only
+        paras.forEach((para) => sec.appendChild(el("p", "item-para", para)));
+      } else {            // substantive — editable so a reviewer can fix flagged figures
+        const body = paras.join("\n\n");
+        const ta = el("textarea", "item-edit");
+        ta.value = body;
+        ta.rows = Math.max(4, Math.min(24, body.split(/\n/).length + Math.ceil(body.length / 95)));
+        sec.appendChild(ta);
+        editors[s.item] = ta;
+      }
     });
   });
   if (r._forward_looking_statements) {
@@ -694,6 +704,33 @@ function renderDraftInto(r, report, meta) {
     table.appendChild(tb);
     sec.appendChild(table);
   });
+
+  // Edit a flagged figure in an Item above, then re-run the guardrail in-app.
+  if (meta && meta.id != null && Object.keys(editors).length) {
+    const row = el("div", "recheck-row");
+    row.appendChild(el("span", "exp-label",
+      "Edited a flagged figure above? Re-run the fact check:"));
+    const rc = el("button", "btn-primary", "Re-check facts");
+    rc.onclick = async () => {
+      const old = rc.textContent;
+      rc.disabled = true; rc.textContent = "Re-checking…";
+      try {
+        const items = Object.entries(editors).map(([item, ta]) => ({ item, disclosure: ta.value }));
+        const res = await fetch(`/api/generations/${meta.id}/reverify`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ items }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "re-check failed");
+        report.innerHTML = "";
+        renderDraftInto(data.result, report, meta);
+      } catch (e) {
+        rc.disabled = false; rc.textContent = old; alert(e.message);
+      }
+    };
+    row.appendChild(rc);
+    fc.appendChild(row);
+  }
   report.appendChild(fc);
 
   if (meta && meta.id != null) {

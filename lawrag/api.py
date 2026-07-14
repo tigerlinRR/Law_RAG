@@ -20,9 +20,12 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import auth, clients, db, export, generations
+from decimal import Decimal
+
+from . import auth, clients, db, export, generations, guardrail
 from .config import ROOT
-from .draft import ITEM_TITLES, add_business_context, draft_8k, draft_filing
+from .draft import (ITEM_TITLES, _compliance_flags, add_business_context, draft_8k,
+                    draft_filing)
 from .ingest import DocMeta, ingest_file
 from .parsers import NeedsOCR
 from .retrieve import Filters, search
@@ -246,6 +249,40 @@ def api_add_business_context(gen_id: int, req: BusinessContextReq,
     updated = add_business_context(g["result"], req.note)
     generations.update_result(gen_id, updated)
     return {"id": gen_id, "result": updated}
+
+
+class ReverifyReq(BaseModel):
+    items: list[dict]  # [{"item": "1.01", "disclosure": "<edited text>"}]
+
+
+@app.post("/api/generations/{gen_id}/reverify")
+def api_reverify(gen_id: int, req: ReverifyReq, user: dict = Depends(current_user)) -> dict:
+    """Re-run the fact guardrail after a human edits the draft's figures/text, so a
+    corrected draft can clear the banner in-app. Reconciles the edited disclosure(s)
+    against the stored source text (+ anchored derivations) and re-saves."""
+    g = _get_generation_or_404(gen_id, user)
+    result = g["result"]
+    edits = {e.get("item"): e.get("disclosure", "") for e in req.items}
+    sections = result.get("_items") or [{
+        "item": result.get("item"), "item_title": result.get("item_title"),
+        "disclosure": result.get("disclosure", ""), "cross_ref": False}]
+    for s in sections:
+        if s.get("item") in edits:
+            s["disclosure"] = edits[s["item"]]
+    result["_items"] = sections
+    if result.get("item") in edits:
+        result["disclosure"] = edits[result["item"]]
+
+    src = result.get("_source_text", "")
+    derived = [(Decimal(v), d) for v, d in result.get("_derived_values", [])]
+    body = "\n\n".join(s.get("disclosure", "") for s in sections if not s.get("cross_ref"))
+    result["_guardrail"] = guardrail.reconcile(body or result.get("disclosure", ""),
+                                               src, derived=derived)
+    result["_compliance"] = _compliance_flags(result.get("item", ""),
+                                              result.get("disclosure", ""))
+    generations.update_result(gen_id, result)
+    auth.log(user["username"], "reverify", f"generation {gen_id}")
+    return {"id": gen_id, "result": result}
 
 
 class ExportReq(BaseModel):
