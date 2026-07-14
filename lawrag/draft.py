@@ -163,19 +163,21 @@ def _ensure_material_relationship(disclosure: str) -> str:
         return disclosure[:idx].rstrip() + "\n\n" + stmt + "\n\n" + disclosure[idx:]
     return disclosure.rstrip() + "\n\n" + stmt
 
+# Field bounds keep the (verbose) 8-K style model from overrunning max_tokens and
+# truncating the JSON mid-string. A real Item disclosure is 1-3 tight paragraphs.
 DRAFT_SCHEMA = {
     "type": "object",
     "properties": {
-        "item": {"type": "string"},
-        "item_title": {"type": "string"},
-        "disclosure": {"type": "string"},
+        "item": {"type": "string", "maxLength": 12},
+        "item_title": {"type": "string", "maxLength": 120},
+        "disclosure": {"type": "string", "maxLength": 5000},
         "facts_used": {
-            "type": "array",
+            "type": "array", "maxItems": 25,
             "items": {
                 "type": "object",
                 "properties": {
-                    "fact": {"type": "string"},
-                    "source_quote": {"type": "string"},
+                    "fact": {"type": "string", "maxLength": 400},
+                    "source_quote": {"type": "string", "maxLength": 500},
                 },
                 "required": ["fact", "source_quote"],
             },
@@ -437,7 +439,8 @@ def draft_8k(
 
     result = llm.chat_json(
         _SYSTEM, _user_prompt(item, item_title, review, precedent_texts),
-        DRAFT_SCHEMA, max_tokens=4096,
+        DRAFT_SCHEMA, max_tokens=8192,  # drafting prompt is small; give the verbose
+                                        # 8-K model room so the JSON isn't truncated
     )
     # Item/title are known inputs, not model output — set them deterministically
     # rather than trust free-form generation (which sometimes echoes precedent text).

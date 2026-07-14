@@ -40,25 +40,32 @@ CHECKLIST = [
     "Dispute Resolution",
 ]
 
+# NOTE: the string/array fields carry maxLength/maxItems bounds. These keep the
+# structured-output generation from overrunning the context window: the 8-K style
+# model is far more verbose than the base, and without bounds it writes essays into
+# each field until it hits max_tokens mid-string -> truncated (invalid) JSON. Bounding
+# each field keeps total output well under the room left after the (large) prompt.
 REVIEW_SCHEMA = {
     "type": "object",
     "properties": {
-        "doc_type": {"type": "string"},
-        "summary": {"type": "string"},
-        "parties": {"type": "array", "items": {"type": "string"}},
+        "doc_type": {"type": "string", "maxLength": 80},
+        "summary": {"type": "string", "maxLength": 700},
+        "parties": {"type": "array", "maxItems": 12,
+                    "items": {"type": "string", "maxLength": 150}},
         "clauses": {
-            "type": "array",
+            "type": "array", "maxItems": 30,
             "items": {
                 "type": "object",
                 "properties": {
-                    "name": {"type": "string"},
-                    "value": {"type": "string"},
-                    "quote": {"type": "string"},
+                    "name": {"type": "string", "maxLength": 80},
+                    "value": {"type": "string", "maxLength": 300},
+                    "quote": {"type": "string", "maxLength": 500},
                 },
                 "required": ["name", "value", "quote"],
             },
         },
-        "key_risks": {"type": "array", "items": {"type": "string"}},
+        "key_risks": {"type": "array", "maxItems": 15,
+                      "items": {"type": "string", "maxLength": 300}},
     },
     "required": ["doc_type", "summary", "parties", "clauses", "key_risks"],
 }
@@ -69,7 +76,10 @@ _SYSTEM = (
     "or assume terms. If a checklist clause is absent, set its value to 'Not found' "
     "and quote to an empty string. Every 'quote' MUST be copied verbatim from the "
     "text. Flag anything a reviewing lawyer should pay attention to (unusual terms, "
-    "one-sided provisions, missing standard protections) in key_risks."
+    "one-sided provisions, missing standard protections) in key_risks. "
+    "Be terse: each 'value' is a brief phrase (not a paragraph); each 'quote' is only "
+    "the specific clause sentence(s), copied verbatim, never a whole section; 'summary' "
+    "is 3-5 sentences. Do not restate or elaborate."
 )
 
 
