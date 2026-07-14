@@ -143,7 +143,7 @@ def _ensure_exhibit_qualifier(disclosure: str) -> str:
     return disclosure.rstrip() + "\n\n" + qualifier
 
 
-def _ensure_material_relationship(disclosure: str) -> str:
+def _ensure_material_relationship(disclosure: str, counterparty: str | None = None) -> str:
     """Item 1.01(c) requires a statement of any material relationship between the
     registrant and a party OTHER THAN the agreement. The model usually writes it
     but drops it when the precedents don't model it, so guarantee it in standard
@@ -155,11 +155,15 @@ def _ensure_material_relationship(disclosure: str) -> str:
     terms = re.findall(r'\(the [“”"]([A-Z][A-Za-z ]+?)[“”"]\)', disclosure)
     instrument = next((t for t in terms if t.strip().lower() not in _PARTY_TERMS), None) \
         or (terms[0] if terms else "Agreement")
-    counterparty = next(
-        (t for t in terms if t.strip().lower() in _PARTY_TERMS
-         and t.strip().lower() not in {"company", "registrant", "party", "parties"}),
-        None)
-    cp = f"the {counterparty}" if counterparty else "the counterparty"
+    if counterparty and counterparty.strip():
+        cp = counterparty.strip()  # the extracted other party — reliable, not a guess
+    else:
+        guess = next(
+            (t for t in terms if t.strip().lower() in _PARTY_TERMS
+             and t.strip().lower() not in {"company", "registrant", "party", "parties",
+                                           "sec", "commission"}),
+            None)
+        cp = f"the {guess}" if guess else "the counterparty"
     stmt = (f"Other than in respect of the {instrument}, there is no material "
             f"relationship between the Company and {cp}.")
     # Insert before the closing "qualified in its entirety" sentence if present.
@@ -421,6 +425,25 @@ def _derive_share_count(review: dict) -> None:
     review.setdefault("_derived", []).append((Decimal(nearest), desc))
 
 
+_FIGURE_PLACEHOLDER = "[NOT IN SOURCE — CONFIRM]"
+
+
+def _lock_figures(disclosure: str, source_text: str, derived: list | None) -> tuple[str, list[str]]:
+    """HYBRID mode: keep the model's prose, but neutralize every FIGURE it produced that
+    is not grounded in the source (or a valid derivation) — replace it with a visible
+    placeholder so no imagined number survives as a plausible value. Returns the locked
+    text + the list of blanked figures (so the UI can tell the reviewer to fill them).
+    (Only figures are locked; a qualitative mis-statement — e.g. "registered offering" —
+    is not a number and still needs human review.)"""
+    r = guardrail.reconcile(disclosure, source_text, derived=derived)
+    fabricated = sorted({i["raw"] for i in r["items"] if i["status"] == "fabricated"},
+                        key=len, reverse=True)  # longest first so substrings don't clash
+    locked = disclosure
+    for raw in fabricated:
+        locked = locked.replace(raw, _FIGURE_PLACEHOLDER)
+    return locked, fabricated
+
+
 def _num_only(s: str) -> str:
     m = re.search(r"[\d,]+(?:\.\d+)?", s or "")
     return m.group(0) if m else (s or "").strip()
@@ -561,7 +584,7 @@ def draft_8k(
     n_precedents: int = 0,
     allowed_clients: list[str] | None = None,
     exclude_document_ids: list[int] | None = None,
-    fact_locked: bool = True,
+    mode: str = "hybrid",
 ) -> dict:
     """Draft an 8-K Item disclosure for `contract_path`, grounded in facts extracted
     from that contract.
@@ -581,12 +604,11 @@ def draft_8k(
         _derive_share_count(review)
 
     precedent_citations: list[str] = []
-    if fact_locked:
-        # FACT-LOCKED (default): assemble the disclosure from verified extracted facts.
-        # The model NEVER writes a figure, so it cannot imagine one. No LLM drafting call.
+    if mode == "assemble":
+        # A) FACT-LOCKED: assemble from verified facts; the model writes no prose at all.
         disc, facts = _assemble_disclosure(item, review, item_title)
         result = {"disclosure": disc, "facts_used": facts}
-    else:
+    else:  # "hybrid" (default) or "llm": the model drafts the prose (in its 8-K style)
         precedent_texts: list[str] = []
         if n_precedents > 0:  # opt-in; skipping avoids needing the DB/retrieval stack
             hits = retrieve.search(
@@ -614,15 +636,21 @@ def draft_8k(
     result["item_title"] = item_title
     disc = result.get("disclosure", "")
     if item == "1.01":
-        disc = _ensure_material_relationship(disc)
-    result["disclosure"] = _ensure_exhibit_qualifier(disc)
+        _parties = [p for p in review.get("parties", []) if p.strip()]
+        _counterparty = _parties[1] if len(_parties) > 1 else None
+        disc = _ensure_material_relationship(disc, _counterparty)
+    disc = _ensure_exhibit_qualifier(disc)
+    full_text = review.get("_full_text", "")
+    if mode == "hybrid":
+        # HYBRID (default): keep the model's prose but HARD-LOCK figures — any number it
+        # produced that isn't grounded in the source is blanked to a placeholder, so no
+        # imagined figure survives. The reviewer then fills the placeholders.
+        disc, result["_blanked_figures"] = _lock_figures(disc, full_text, review.get("_derived"))
+    result["disclosure"] = disc
     if _needs_forward_looking_statements(result["disclosure"]):
         result["_forward_looking_statements"] = _FORWARD_LOOKING_STATEMENTS
     result["_compliance"] = _compliance_flags(item, result["disclosure"])
-    full_text = review.get("_full_text", "")
-    # Fact-fidelity guardrail: reconcile every figure in the disclosure against the
-    # SOURCE contract. The style adapter fabricates numbers; this catches them (RED)
-    # and flags material omissions (AMBER) before a human treats the draft as ready.
+    # Fact-fidelity guardrail on the (figure-locked) disclosure.
     result["_guardrail"] = guardrail.reconcile(
         result["disclosure"], full_text, derived=review.get("_derived"))
     # Keep the source text + anchored derivations so an edited draft can be re-verified

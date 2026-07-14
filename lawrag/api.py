@@ -24,9 +24,9 @@ from decimal import Decimal
 
 from . import auth, clients, db, export, generations, guardrail
 from .config import ROOT
-from .draft import (ITEM_TITLES, _FORWARD_LOOKING_STATEMENTS, _compliance_flags,
-                    _needs_forward_looking_statements, add_business_context, draft_8k,
-                    draft_filing)
+from .draft import (ITEM_TITLES, _FIGURE_PLACEHOLDER, _FORWARD_LOOKING_STATEMENTS,
+                    _compliance_flags, _needs_forward_looking_statements,
+                    add_business_context, draft_8k, draft_filing)
 from .ingest import DocMeta, ingest_file
 from .parsers import NeedsOCR
 from .retrieve import Filters, search
@@ -279,6 +279,10 @@ def api_reverify(gen_id: int, req: ReverifyReq, user: dict = Depends(current_use
     body = "\n\n".join(s.get("disclosure", "") for s in sections if not s.get("cross_ref"))
     result["_guardrail"] = guardrail.reconcile(body or result.get("disclosure", ""),
                                                src, derived=derived)
+    # Keep the banner honest: unfilled placeholders still count as "to fill" even though
+    # a placeholder isn't a figure the guardrail flags.
+    n_ph = (body or result.get("disclosure", "")).count(_FIGURE_PLACEHOLDER)
+    result["_blanked_figures"] = [_FIGURE_PLACEHOLDER] * n_ph
     result["_compliance"] = _compliance_flags(result.get("item", ""),
                                               result.get("disclosure", ""))
     # Recompute the FLS legend against the edited text: if the reviewer removed the
