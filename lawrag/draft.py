@@ -409,33 +409,43 @@ def _compliance_flags(item: str, disclosure: str) -> list[dict]:
 def draft_8k(
     contract_path: str | Path,
     item: str = "1.01",
-    n_precedents: int = 2,
+    n_precedents: int = 0,
     allowed_clients: list[str] | None = None,
     exclude_document_ids: list[int] | None = None,
 ) -> dict:
     """Draft an 8-K Item disclosure for `contract_path`, grounded in facts extracted
-    from that contract, using same-Item historical filings as a style reference only.
+    from that contract.
 
-    `exclude_document_ids`: for held-out evaluation — exclude the real 8-K that this
-    contract actually produced, so the "precedent" can't leak the answer."""
+    `n_precedents` defaults to 0: the fine-tuned 8-K adapter already carries the filing
+    STYLE in its weights, so in-prompt precedents are redundant — and worse, the model
+    copied their FACTS (share counts, file numbers, registered-vs-private-placement)
+    into the draft, contradicting the source contract (verified precedent fact-leakage).
+    Set n_precedents>0 only for the un-adapted base model. `exclude_document_ids`:
+    for held-out evaluation — exclude the real 8-K this contract produced.
+
+    Facts always come from the source contract; the guardrail (lawrag.guardrail) flags
+    any figure not grounded verbatim (incl. correct-but-derived ones) for human review."""
     item_title = ITEM_TITLES.get(item, "")
     review = review_contract(contract_path, checklist=_checklist_for(item))
 
-    hits = retrieve.search(
-        f"8-K Item {item} {item_title}",
-        filters=retrieve.Filters(doc_type="8-K"),
-        top_k=n_precedents * 4,  # a few chunks per doc; grouped back into docs below
-        allowed_clients=allowed_clients,
-        meta_filters={"filing_items": item},
-        exclude_document_ids=exclude_document_ids,
-        use_rerank=False,  # precedent lookup is exact-match by item; RRF order is fine
-    )
-    by_doc: dict[int, list] = {}
-    for h in hits:
-        by_doc.setdefault(h.document_id, []).append(h)
-    precedent_docs = list(by_doc.values())[:n_precedents]
-    precedent_texts = ["\n".join(c.content for c in chs) for chs in precedent_docs]
-    precedent_citations = [chs[0].citation() for chs in precedent_docs]
+    precedent_texts: list[str] = []
+    precedent_citations: list[str] = []
+    if n_precedents > 0:  # opt-in only; skipping avoids needing the DB/retrieval stack
+        hits = retrieve.search(
+            f"8-K Item {item} {item_title}",
+            filters=retrieve.Filters(doc_type="8-K"),
+            top_k=n_precedents * 4,  # a few chunks per doc; grouped back into docs below
+            allowed_clients=allowed_clients,
+            meta_filters={"filing_items": item},
+            exclude_document_ids=exclude_document_ids,
+            use_rerank=False,  # exact-match by item; RRF order is fine
+        )
+        by_doc: dict[int, list] = {}
+        for h in hits:
+            by_doc.setdefault(h.document_id, []).append(h)
+        precedent_docs = list(by_doc.values())[:n_precedents]
+        precedent_texts = ["\n".join(c.content for c in chs) for chs in precedent_docs]
+        precedent_citations = [chs[0].citation() for chs in precedent_docs]
 
     result = llm.chat_json(
         _SYSTEM, _user_prompt(item, item_title, review, precedent_texts),
