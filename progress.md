@@ -167,6 +167,26 @@ $38,675,000 aggregate but NO total share count:
   as `derived = $38,675,000 ÷ $4.55` (no longer blocked). So the lawyer fixes the flagged
   cell and clears the block in-app.
 
+## Fact-locked drafting — zero imagination (2026-07-14)
+User's hard requirement: "we can't allow so many imagination, NEVER." The 8-K adapter,
+even precedent-free, confabulated whole narratives on the real SPA (invented share
+count, an S-3 registered-offering story + fake dates leaked from the fine-tune's TRAINING
+memory of Richtech's own past filings). So drafting is no longer LLM-written:
+- **`draft_8k(fact_locked=True)` (now the default)** assembles the disclosure
+  DETERMINISTICALLY from the verified extracted clauses (+ the code-derived share count)
+  via `draft._assemble_disclosure` — the model NEVER writes a figure, so it cannot imagine
+  one. No LLM drafting call. Every stated fact is cited to its verbatim source quote;
+  facts the extraction didn't capture are OMITTED, never invented. `fact_locked=False`
+  keeps the old LLM-drafting path for comparison.
+- Verified on the real SPA: guardrail **CLEAN, zero fabrication**, correct qualifier +
+  (c) material-relationship statement.
+- **Tradeoff (by design):** prose is templated and THIN where the extraction missed a
+  field (e.g. it got $4.55/share + $0.0001 par but not the aggregate that run, and
+  doc_type came out as junk "SPG" → generic "definitive agreement"). It errs toward
+  OMISSION, never invention. **Next lever for fuller auto-drafts = extraction
+  completeness/reliability** (reliably capture the aggregate, a clean agreement name),
+  NOT trusting the model to write facts.
+
 ## Later / optional (recommended order: A, scoped-AMBER)
 - **A — scale corpus** to ~3,000+ pairs (~300 more small/mid-cap companies; edit
   `COMPANIES` in `training/scrape_all_items.py`) and retrain v3 — ONLY if a future need

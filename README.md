@@ -161,11 +161,16 @@ concerns: RAG = facts, adapter = style, guardrail = the compliance red line.
    containment) is still available (`n_precedents>0`) for the un-adapted base model, but
    the deployed adapter runs precedent-free — which also means pure generation needs no
    DB/embed/rerank.
-3. **Draft** the Item disclosure with the LLM as a real 8-K would read: a
-   **brief, selective** description of the *material* terms in one to three
-   paragraphs, not a comprehensive summary — standard/boilerplate provisions are
-   collapsed into a catch-all and the rest is deferred to the exhibit, calibrated
-   to the precedents' own length and selectivity. It uses *only* the extracted
+3. **Draft — fact-locked by default (`draft_8k(fact_locked=True)`).** The disclosure is
+   ASSEMBLED deterministically from the verified extracted clauses (+ the code-derived
+   share count) by `draft._assemble_disclosure` — **the model never writes a figure, so
+   it cannot imagine one** (no LLM drafting call). Facts the extraction didn't capture are
+   OMITTED, never invented; it errs toward omission. This exists because the fine-tuned
+   adapter, even precedent-free, confabulated whole narratives (invented share counts, an
+   S-3 story + fake dates leaked from its training memory). Prose is templated (a lawyer
+   polishes wording, not facts); improving *extraction completeness* is the lever for
+   fuller auto-drafts. `fact_locked=False` keeps the older LLM-drafting path (below) for
+   comparison — it uses *only* the extracted
    contract facts; every disclosed fact is cited back to its verbatim quote in
    `facts_used`, missing facts are marked `[NOT STATED IN CONTRACT]` (never
    invented), and the standard "qualified in its entirety by reference to
