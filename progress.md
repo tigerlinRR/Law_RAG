@@ -137,6 +137,26 @@ Shook out on the live adapter against a real Richtech SPA (accession 0001213900-
   `1.01,3.02` → filing with both Items. **Item 8.01 (press releases) still needs those
   docs as input = Plan B (not built).**
 
+## Grounded securities figures + anchored derivation (2026-07-14)
+Shaken out on the real SPA (0001213900-26-009823), which states $4.55/share +
+$38,675,000 aggregate but NO total share count:
+- **1.01 checklist** gained "Securities Type/Class (and par value)", "Number of Shares
+  or Units Issued", "Price per Share/Unit" → $4.55 and $0.0001 are now extracted and
+  used (were fabricated $2.00/$0.001). `_SYSTEM` rule 5 forbids computing/deriving figures.
+- **Anchored derivation (guardrail):** `draft._derive_share_count` computes the missing
+  count deterministically (aggregate ÷ per-share, from labeled clauses) and passes that
+  ONE value to `guardrail.reconcile(..., derived=[...])`. A draft figure matching it is
+  "derived" — grounded, review-required, NON-blocking, arithmetic shown. Verdict now
+  {blocked | needs_review | clean}. **Safety:** the guardrail does NOT blind-search
+  number pairs (an earlier version coincidentally "grounded" a wrong 1,000,000 =
+  $50,000 × $20) — only the passed-in labeled value is honored; wrong figures stay RED.
+  Locked by tests (11/11).
+- **Honest limit re-confirmed:** on this SPA the model confabulates the numbers anyway
+  (invents count/aggregate/dates, ignores the supplied 8,500,000) → still correctly
+  BLOCKED. Derivation only helps when the model states the anchored value; it cannot
+  rescue a mangled draft. The guardrail (detect → human fix) remains the guarantee; the
+  model is never trusted for facts.
+
 ## Later / optional (recommended order: A, scoped-AMBER)
 - **A — scale corpus** to ~3,000+ pairs (~300 more small/mid-cap companies; edit
   `COMPANIES` in `training/scrape_all_items.py`) and retrain v3 — ONLY if a future need

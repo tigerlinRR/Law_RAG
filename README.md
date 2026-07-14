@@ -190,13 +190,21 @@ concerns: RAG = facts, adapter = style, guardrail = the compliance red line.
 4. **Reconcile every figure (fact guardrail).** After drafting, `lawrag.guardrail`
    normalizes then reconciles each material datum (currency, share/unit counts, %,
    dates, parties) in the draft against the source contract — pure local text, no DB.
-   A figure in the draft with no match in the source — **including a model-*computed*
-   one** (e.g. a share count derived from an invented per-share price) — is **RED and
-   blocks** the draft from being treated as "ready"; the verdict + flagged figures show
-   as a one-line banner on screen and in full in the review pack. This catches
-   format-correct-but-wrong numbers that the presence-only `_compliance` checks miss.
-   (Omissions are AMBER, review-only, never blocking; scoping them to the rubric's
-   MUST-disclose fields is a pending enhancement.)
+   A figure in the draft with no match in the source is **RED and blocks** the draft
+   from being treated as "ready"; the verdict + flagged figures show as a one-line
+   banner on screen and in full in the review pack. This catches format-correct-but-
+   wrong numbers that the presence-only `_compliance` checks miss.
+   - **Derived figures** (a figure that equals a *specific, labeled* arithmetic
+     derivation from verbatim source figures — e.g. share count = aggregate ÷ per-share
+     price, which the drafter computes deterministically from the extracted clauses) are
+     recognized as **grounded → "derived": review-required but NON-blocking**, with the
+     arithmetic shown for one-glance confirmation. The check is *anchored* to that one
+     labeled computation — it does NOT blind-search all number pairs (which would
+     coincidentally "ground" a wrong figure), so a wrong/invented count stays RED.
+   - **Omissions** are AMBER, review-only, never blocking (scoping to the rubric's
+     MUST-disclose fields is a pending enhancement).
+   Verdict: `blocked` (any fabrication) / `needs_review` (derived or omitted, non-
+   blocking) / `clean`.
 5. **Export — two separate files, never combined:**
    - The **8-K filing** (`draft_to_word` / `draft_to_pdf`): a clean document that
      mirrors an actual Form 8-K — SEC cover page (registrant/EIN/address,
