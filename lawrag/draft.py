@@ -19,6 +19,7 @@ against the citations, not trusted as a finished filing.
 from __future__ import annotations
 
 import re
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from . import guardrail, llm, retrieve
@@ -368,6 +369,58 @@ def _needs_forward_looking_statements(disclosure: str) -> bool:
     return bool(_FLS_TRIGGER_RE.search(disclosure))
 
 
+def _parse_amount(text: str) -> Decimal | None:
+    """Pull the first numeric amount from an extracted value ('$4.55', '$38,675,000.00',
+    '$38.675 million') as a Decimal."""
+    m = re.search(r"([\d,]+(?:\.\d+)?)\s*(million|billion)?", text or "", re.I)
+    if not m:
+        return None
+    try:
+        val = Decimal(m.group(1).replace(",", ""))
+    except InvalidOperation:
+        return None
+    mag = (m.group(2) or "").lower()
+    return val * Decimal(1_000_000) if mag == "million" else \
+        val * Decimal(1_000_000_000) if mag == "billion" else val
+
+
+def _find_clause(review: dict, name_contains: str) -> dict | None:
+    return next((c for c in review.get("clauses", [])
+                 if name_contains.lower() in c.get("name", "").lower()), None)
+
+
+def _derive_share_count(review: dict) -> None:
+    """Securities sales often state a per-share price and an aggregate but NOT a total
+    share count (it lives only in per-purchaser schedules), so the model invents one.
+    Compute it deterministically (aggregate ÷ price) and add it as a DERIVED fact so the
+    drafter states the correct figure. The guardrail recognizes it as derived
+    (arithmetic of two verbatim source figures) -> non-blocking, arithmetic shown."""
+    shares = _find_clause(review, "Number of Shares")
+    if shares and shares.get("value", "").strip().lower() not in ("", "not found"):
+        return  # contract states it explicitly
+    price_c, agg_c = _find_clause(review, "Price per Share"), _find_clause(review, "Purchase Price")
+    if not (price_c and agg_c):
+        return
+    price, agg = _parse_amount(price_c.get("value", "")), _parse_amount(agg_c.get("value", ""))
+    if not price or not agg or price <= 0:
+        return
+    count = agg / price
+    nearest = round(count)
+    if nearest <= 0 or abs(count - nearest) > count * Decimal("0.005"):
+        return  # not a clean whole-share division -> don't guess
+    desc = f"= {agg_c['value'].strip()} ÷ {price_c['value'].strip()}"
+    review.setdefault("clauses", []).append({
+        "name": "Number of Shares or Units Issued (derived)",
+        "value": (f"{nearest:,} shares — derived as {agg_c['value'].strip()} ÷ "
+                  f"{price_c['value'].strip()}; both stated in the contract. "
+                  "State this share count."),
+        "quote": "",
+    })
+    # Anchored derivation for the guardrail: ONLY this specific value counts as
+    # "derived" (grounded); the model's inventions stay fabricated -> RED.
+    review.setdefault("_derived", []).append((Decimal(nearest), desc))
+
+
 def _facts_block(review: dict) -> str:
     lines = [
         f"Parties: {', '.join(review.get('parties', [])) or '[unknown]'}",
@@ -437,6 +490,8 @@ def draft_8k(
     any figure not grounded verbatim (incl. correct-but-derived ones) for human review."""
     item_title = ITEM_TITLES.get(item, "")
     review = review_contract(contract_path, checklist=_checklist_for(item))
+    if item in ("1.01", "3.02"):  # securities sales: supply the derived share count
+        _derive_share_count(review)
 
     precedent_texts: list[str] = []
     precedent_citations: list[str] = []
@@ -477,7 +532,8 @@ def draft_8k(
     # Fact-fidelity guardrail: reconcile every figure in the disclosure against the
     # SOURCE contract. The style adapter fabricates numbers; this catches them (RED)
     # and flags material omissions (AMBER) before a human treats the draft as ready.
-    result["_guardrail"] = guardrail.reconcile(result["disclosure"], full_text)
+    result["_guardrail"] = guardrail.reconcile(
+        result["disclosure"], full_text, derived=review.get("_derived"))
     for f in result.get("facts_used", []):
         f["verified"] = verify_quote(f.get("source_quote", ""), full_text)
     result["_source_contract"] = Path(contract_path).name

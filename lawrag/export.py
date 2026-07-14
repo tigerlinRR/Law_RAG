@@ -396,9 +396,9 @@ def draft_to_word(draft: dict) -> bytes:
 _GUARDRAIL_VERDICT = {
     "blocked": "BLOCKED — the draft contains figures not grounded in the source "
                "contract. Do not treat as ready; resolve every RED item below.",
-    "needs_review": "NEEDS REVIEW — figures present in the source contract are absent "
-                    "from the draft. 8-K disclosure is selective; confirm none of the "
-                    "AMBER omissions below is legally material.",
+    "needs_review": "NEEDS REVIEW (does not block) — the draft contains figures that are "
+                    "DERIVED from the source (confirm the arithmetic shown) and/or required "
+                    "source figures absent from the draft. Review each below.",
     "clean": "CLEAN — every figure in the draft is grounded in the source contract.",
 }
 
@@ -421,6 +421,7 @@ def review_to_word(draft: dict) -> bytes:
         doc.add_paragraph(_GUARDRAIL_VERDICT.get(verdict, verdict))
         gitems = guard.get("items") or []
         fabricated = [i for i in gitems if i.get("status") == "fabricated"]
+        derived = [i for i in gitems if i.get("status") == "derived"]
         omitted = [i for i in gitems if i.get("status") == "omitted"]
         if fabricated:
             doc.add_paragraph(
@@ -429,6 +430,13 @@ def review_to_word(draft: dict) -> bytes:
             for i in fabricated:
                 doc.add_paragraph(f"{i.get('kind','')}: {i.get('raw','')}",
                                   style="List Bullet")
+        if derived:
+            doc.add_paragraph(
+                "DERIVED — figures computed from verbatim source figures (grounded, but "
+                "confirm the arithmetic):")
+            for i in derived:
+                doc.add_paragraph(f"{i.get('kind','')}: {i.get('raw','')}  "
+                                  f"{i.get('source_snippet','')}", style="List Bullet")
         if omitted:
             doc.add_paragraph(
                 "AMBER — figures in the source contract absent from the draft. 8-K "
@@ -736,12 +744,14 @@ def _review_html(draft: dict) -> str:
     guard_html = ""
     if guard.get("items") is not None:
         gitems = guard.get("items") or []
-        def _grows(status):
+        def _grows(status, show_snip):
             return "".join(
                 f"<tr><td>{esc(i.get('kind',''))}</td><td>{esc(i.get('raw',''))}</td>"
-                f"<td>{esc((i.get('source_snippet') or '') if status=='omitted' else '')}</td></tr>"
+                f"<td>{esc(i.get('source_snippet') or '') if show_snip else ''}</td></tr>"
                 for i in gitems if i.get("status") == status)
-        fab, om = _grows("fabricated"), _grows("omitted")
+        fab = _grows("fabricated", False)
+        der = _grows("derived", True)
+        om = _grows("omitted", True)
         verdict = guard.get("verdict", "")
         cls = {"blocked": "gr-red", "needs_review": "gr-amber"}.get(verdict, "gr-green")
         guard_html = (
@@ -750,6 +760,9 @@ def _review_html(draft: dict) -> str:
             + ("<p class='note'>RED — in the draft, NOT found in the source contract "
                "(likely fabricated):</p><table><thead><tr><th>Kind</th><th>Draft value"
                "</th><th></th></tr></thead><tbody>" + fab + "</tbody></table>" if fab else "")
+            + ("<p class='note'>DERIVED — computed from verbatim source figures (grounded; "
+               "confirm the arithmetic):</p><table><thead><tr><th>Kind</th><th>Draft value"
+               "</th><th>Derivation</th></tr></thead><tbody>" + der + "</tbody></table>" if der else "")
             + ("<p class='note'>AMBER — in the source contract, absent from the draft "
                "(8-K disclosure is selective; confirm none is legally material):</p>"
                "<table><thead><tr><th>Kind</th><th>Source value</th><th>Context"

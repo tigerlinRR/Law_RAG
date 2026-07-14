@@ -219,16 +219,39 @@ def _party_in_source_text(d: Datum, source_low: str) -> bool:
     return bool(toks) and all(t in source_low for t in toks)
 
 
+def _match_derived(d: Datum, derived: list | None) -> str | None:
+    """Return the derivation description if numeric `d` matches a caller-supplied,
+    semantically-anchored derived value (e.g. share count = aggregate ÷ per-share price,
+    computed ONCE in draft.py from the labeled clauses), else None.
+
+    We deliberately do NOT blind-search all source-number pairs for a product/quotient:
+    with many figures present that yields COINCIDENTAL matches (a wrong 1,000,000 =
+    $50,000 × $20) and would wrongly ground a fabricated number. Only the specific,
+    labeled computation passed in is honored — a wrong figure stays fabricated (RED)."""
+    if not derived or d.kind not in ("currency", "count"):
+        return None
+    for value, desc in derived:
+        tol = abs(value) * Decimal("0.005") + max(d.step, Decimal(1)) / 2
+        if abs(d.canonical - value) <= tol:
+            return desc
+    return None
+
+
 # --- public API ---------------------------------------------------------------
 def reconcile(draft_text: str, source_text: str,
-              must_disclose: set[str] | None = None) -> dict:
+              must_disclose: set[str] | None = None,
+              derived: list | None = None) -> dict:
     """Reconcile every material datum in the DRAFT against the SOURCE.
 
-    Returns {"verdict": clean|blocked, "items": [...]} where each item is
-    {raw, normalized, kind, status ∈ {matched,fabricated,omitted}, source_snippet}.
+    Returns {"verdict": clean|needs_review|blocked, "items": [...]} where each item is
+    {raw, normalized, kind, status ∈ {matched,derived,fabricated,omitted}, source_snippet}.
 
-    - fabricated (draft datum, incl. model-COMPUTED figures, absent from source) -> RED.
-      **RED is the only status that blocks** (spec §4, amended 2026-07-10).
+    - fabricated (draft datum absent from source AND not an arithmetic consequence of it)
+      -> RED. **Only a fabrication blocks** (spec §4, amended 2026-07-10).
+    - derived (draft figure = an exact product/quotient of two verbatim source figures,
+      e.g. share count = aggregate ÷ per-share price) -> review-required, NON-blocking;
+      `source_snippet` shows the arithmetic so a human confirms it (and catches a wrong
+      derivation). Grounded in the source, just not written verbatim.
     - omitted (source datum absent from draft) -> AMBER, REVIEW-ONLY, never blocks and
       never affects the verdict. A blanket omission check drowns RED in noise against
       8-K's deliberately selective disclosure (39 AMBER in the field test), so omissions
@@ -242,19 +265,24 @@ def reconcile(draft_text: str, source_text: str,
     s_data = extract(source_text)
     source_low = source_text.lower()
     items: list[dict] = []
-    blocked = False
+    blocked = review = False
 
     for d in d_data:
         hit = _find(d, s_data)
         matched = hit is not None
         if not matched and d.kind == "party" and _party_in_source_text(d, source_low):
             matched = True
-        status = "matched" if matched else "fabricated"
-        if not matched:
-            blocked = True
+        snippet = hit.ctx if hit else None
+        if matched:
+            status = "matched"
+        else:
+            deriv = _match_derived(d, derived)  # a labeled arithmetic consequence of source?
+            if deriv:
+                status, snippet, review = "derived", deriv, True
+            else:
+                status, blocked = "fabricated", True
         items.append({"raw": d.raw, "normalized": str(d.canonical), "kind": d.kind,
-                      "status": status,
-                      "source_snippet": hit.ctx if hit else None})
+                      "status": status, "source_snippet": snippet})
 
     if must_disclose:
         kws = [k.lower() for k in must_disclose]
@@ -268,8 +296,11 @@ def reconcile(draft_text: str, source_text: str,
             if dedup in reported:
                 continue
             reported.add(dedup)
+            review = True
             items.append({"raw": s.raw, "normalized": str(s.canonical), "kind": s.kind,
                           "status": "omitted", "source_snippet": s.ctx})
 
-    verdict = "blocked" if blocked else "clean"   # RED-only drives the verdict
+    # Only a true fabrication BLOCKS. Derived figures (and rubric omissions) are
+    # review-required but non-blocking -> a human confirms; they never gate "ready".
+    verdict = "blocked" if blocked else "needs_review" if review else "clean"
     return {"verdict": verdict, "items": items}

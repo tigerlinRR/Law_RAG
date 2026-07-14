@@ -74,7 +74,8 @@ def TP2_kscp_frost_debt_omission_OPTIONB():
            "Frost Bank. Closing cash payment of $5,000,000.")
     draft = "The Company paid $5,000,000 in cash at closing."
     r = reconcile(draft, src, must_disclose={"indebtedness", "debt"})
-    assert r["verdict"] == "clean", "omission never blocks, even under Option B"
+    assert r["verdict"] != "blocked", "omission never blocks, even under Option B"
+    assert r["verdict"] == "needs_review", "a surfaced omission is review-required"
     assert any(i["normalized"] == "1100000" and i["status"] == "omitted"
                for i in r["items"]), "scoped AMBER should surface the $1.1M debt"
 
@@ -91,6 +92,24 @@ def TP3_aapl_share_count():
     assert any(i["normalized"] == "1274374682" and i["status"] == "omitted"
                for i in r["items"]), "scoped AMBER should surface the cap"
     assert r["verdict"] == "blocked", "the 500M RED still blocks"
+
+
+@case
+def TP_derived_sharecount_grounded_but_wrong_blocks():
+    # A caller-supplied (semantically anchored) derived value is "derived" (grounded,
+    # review-required, NON-blocking). A WRONG count is NOT that value -> fabricated ->
+    # blocks. And crucially, a coincidental product/quotient must NOT ground a wrong one.
+    from decimal import Decimal
+    src = "at a purchase price of $4.55 per share for aggregate gross proceeds of $38,675,000."
+    der = [(Decimal(8500000), "= $38,675,000 ÷ $4.55")]
+    r = reconcile("issued 8,500,000 shares at $4.55 per share for $38,675,000.", src, derived=der)
+    assert r["verdict"] != "blocked", "a correct derivation (8.5M) must not block"
+    assert any(i["normalized"] == "8500000" and i["status"] == "derived" for i in r["items"]), \
+        "correct share count should be 'derived'"
+    r2 = reconcile("issued 1,000,000 shares at $4.55 per share for $4,550,000.", src, derived=der)
+    assert r2["verdict"] == "blocked", "a wrong share count must still block"
+    assert any(i["normalized"] == "1000000" and i["status"] == "fabricated" for i in r2["items"]), \
+        "wrong count must be fabricated, never coincidentally 'derived'"
 
 
 @case

@@ -604,18 +604,22 @@ function renderDraftInto(r, report, meta) {
     const g = r._guardrail;
     const items = g.items || [];
     const fab = items.filter((i) => i.status === "fabricated").length;
+    const der = items.filter((i) => i.status === "derived").length;
     const om = items.filter((i) => i.status === "omitted").length;
-    // RED (fabrication) is the only status that blocks; omissions are review-only
-    // and never block (spec §4, amended 2026-07-10).
+    // Only a fabrication BLOCKS. Derived figures (exact arithmetic of source figures)
+    // and rubric omissions are review-required but non-blocking.
     let cls, msg;
     if (fab > 0) {
       cls = "gr-blocked";
       msg = `⚠ BLOCKED — ${fab} figure(s) in the draft are NOT grounded in the source ` +
             `contract. Do not treat as ready. See the Review pack for the list.`;
-    } else if (om > 0) {
+    } else if (der > 0 || om > 0) {
       cls = "gr-review";
-      msg = `Fact check clean (no ungrounded figures). ${om} required source figure(s) ` +
-            `not in the draft — review-only, does not block. See the Review pack.`;
+      const parts = [];
+      if (der) parts.push(`${der} figure(s) derived from the contract (e.g. share count ` +
+                          `= aggregate ÷ price) — confirm the arithmetic`);
+      if (om) parts.push(`${om} required source figure(s) not in the draft`);
+      msg = `Review (does not block): ${parts.join("; ")}. See the Review pack.`;
     } else {
       cls = "gr-clean";
       msg = "✓ Fact check clean — every figure in the draft is grounded in the source.";
