@@ -204,6 +204,38 @@ mis-picking "the SEC" from the model's defined terms). Note for future: the stan
 tension is hybrid(nice prose, numbers safe, narrative not) vs assemble(safe, thin) — the
 deep fix for both is extraction completeness + (later) a narrative-claim check.
 
+## v4 delexicalized adapter — deployed, backfill built, NEEDS v5 before production (2026-07-15)
+RTX built **v4**: trained on DELEXICALIZED pairs (deal facts → typed placeholders
+[AMOUNT_n]/[NUM_n]/[PCT_n]/[DATE_n]/[ORG_n]/[PERSON_n]), so the model learns 8-K
+structure/style only and **structurally cannot emit a real number** — it outputs a
+placeholder skeleton; the Jetson backfills real values from the source. This is the real
+answer to "NEVER imagination" (numbers come from deterministic backfill, not the model).
+- **Deployed on Thor:** NVFP4 (21GB) at `/home/jetson/models/qwen36-8k-v4-nvfp4`, served
+  as Docker container `lawrag-llm-8k-v4` on **:8013** (`served-model-name qwen3.6-8k-v4`,
+  tight template). Config: `CONFIG.llm_v4_base_url`/`llm_v4_model`.
+- **Backfill built + validated:** `lawrag/delex_backfill.py` (reuses `training/llamafactory/delex.py`
+  — spaCy + en_core_web_sm installed on the venv). Round-trips verbatim; hallucinated/
+  off-by-index placeholders → `[NOT IN SOURCE — CONFIRM]` + guardrail RED. Guardrail
+  broadened to catch ≥4-digit comma numbers (v4's occasional literal invention, e.g.
+  "10,000 sq ft" when real is 79,325). `draft_8k(mode="delex")` = parse (no LLM) → delex →
+  v4 → backfill → guardrail; needs ONLY v4 (no extraction model / no 2-model GPU contention).
+- **BLOCKER found — placeholder-numbering misalignment (RTX's flagged risk, confirmed):**
+  slot-alignment test at a larger (60k) source window fixed the literal number invention
+  (real 79,325 captured) BUT v4 backfilled the **WRONG orgs** into Company/Seller slots
+  ("Title Company" as the Company, "EBS Realty Partners" as seller). Root cause: training
+  numbered placeholders **output-first**; inference numbers **input-only** — with many
+  entities the indices drift. **These wrong values ARE real orgs in the source, so the
+  guardrail CANNOT catch it** (張冠李戴). So v4 is NOT production-safe yet.
+- **INTERIM (now):** v2 restored as the working model (guardrail catches its number
+  fabrication — safer than v4's wrong-orgs); `draft_8k` default back to `mode="hybrid"`;
+  v4 container stopped. **`docker start lawrag-llm-8k` = v2; do not run v2+v4 together at
+  0.5 gpu-util (won't fit).**
+- **NEXT — waiting on RTX v5:** retrain with **INPUT-FIRST numbering** (train numbering =
+  inference numbering; RTX's ~2h fix). Then re-pull, re-test **org slot alignment at the
+  larger window**; if clean → switch to v5, retire v2 for good. v2 was only ever the 8-K
+  *style* model; it's obsolete once a delex adapter aligns (extraction/DD, if ever needed,
+  use the plain base, never v2).
+
 ## Later / optional (recommended order: A, scoped-AMBER)
 - **A — scale corpus** to ~3,000+ pairs (~300 more small/mid-cap companies; edit
   `COMPANIES` in `training/scrape_all_items.py`) and retrain v3 — ONLY if a future need
