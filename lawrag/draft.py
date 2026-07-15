@@ -600,17 +600,17 @@ def draft_8k(
     Facts always come from the source contract; the guardrail (lawrag.guardrail) flags
     any figure not grounded verbatim (incl. correct-but-derived ones) for human review."""
     item_title = ITEM_TITLES.get(item, "")
-    review = review_contract(contract_path, checklist=_checklist_for(item))
-    if item in ("1.01", "3.02"):  # securities sales: supply the derived share count
-        _derive_share_count(review)
-
     precedent_citations: list[str] = []
+
     if mode == "delex":
-        # v4: delex the source -> the model emits a placeholder skeleton (cannot write a
-        # real value) -> backfill placeholders from the source map. Facts come from the
-        # source, structure from the model. Requires v4 served (config.llm_v4_*).
+        # v4: delex the source (regex + spaCy — NO LLM extraction) -> the model emits a
+        # placeholder skeleton (cannot write a real value) -> backfill placeholders from
+        # the source map. Facts come from the source, structure from v4. Needs ONLY the v4
+        # endpoint (config.llm_v4_*); does not touch the extraction model, so no 2-model
+        # GPU contention with the main model.
         from . import delex_backfill as _bf
-        full_text = review.get("_full_text", "")
+        from .parsers import parse as _parse
+        full_text = "\n\n".join(b.text for b in _parse(Path(contract_path)))
         delexed, smap = _bf.delex_source(full_text[:_bf.SOURCE_WINDOW])
         skeleton = llm.chat(
             _bf.SYSTEM,
@@ -619,11 +619,18 @@ def draft_8k(
             base_url=CONFIG.llm_v4_base_url, model=CONFIG.llm_v4_model)
         disclosure, missing = _bf.backfill(skeleton, smap)
         result = {"disclosure": disclosure, "facts_used": [], "_backfill_missing": missing}
-    elif mode == "assemble":
+        review = {"_full_text": full_text, "parties": [], "clauses": [],
+                  "doc_type": "", "summary": "", "_derived": []}
+    else:
+        review = review_contract(contract_path, checklist=_checklist_for(item))
+        if item in ("1.01", "3.02"):  # securities sales: supply the derived share count
+            _derive_share_count(review)
+
+    if mode == "assemble":
         # A) FACT-LOCKED: assemble from verified facts; the model writes no prose at all.
         disc, facts = _assemble_disclosure(item, review, item_title)
         result = {"disclosure": disc, "facts_used": facts}
-    else:  # "hybrid" (default) or "llm": the model drafts the prose (in its 8-K style)
+    elif mode in ("hybrid", "llm"):  # the model drafts the prose (in its 8-K style)
         precedent_texts: list[str] = []
         if n_precedents > 0:  # opt-in; skipping avoids needing the DB/retrieval stack
             hits = retrieve.search(
