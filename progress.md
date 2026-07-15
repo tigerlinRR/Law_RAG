@@ -230,11 +230,26 @@ answer to "NEVER imagination" (numbers come from deterministic backfill, not the
   fabrication — safer than v4's wrong-orgs); `draft_8k` default back to `mode="hybrid"`;
   v4 container stopped. **`docker start lawrag-llm-8k` = v2; do not run v2+v4 together at
   0.5 gpu-util (won't fit).**
-- **NEXT — waiting on RTX v5:** retrain with **INPUT-FIRST numbering** (train numbering =
-  inference numbering; RTX's ~2h fix). Then re-pull, re-test **org slot alignment at the
-  larger window**; if clean → switch to v5, retire v2 for good. v2 was only ever the 8-K
-  *style* model; it's obsolete once a delex adapter aligns (extraction/DD, if ever needed,
-  use the plain base, never v2).
+- **NEXT — RTX training v5 now (input-first + 24k window):** RTX confirmed two hard walls
+  that kill the naive "80k window" idea: (1) **data** — the training corpus source docs were
+  hard-truncated at **24000 chars** (935/2174 hit exactly 24k; full EDGAR docs up to ~400k
+  but cut at packaging), so an 80k *training* window needs a full-corpus rebuild (big); (2)
+  **GPU** — 80k≈22k tokens ≈ 3× the current 8192 cutoff, and v4 already fills 96GB at 8192
+  (DDP, 70GB base/card) → would need DeepSpeed ZeRO-3. **But the confirmed blocker (wrong-org
+  slots) does NOT need a big window** — parties are in the contract's opening (<24k). So v5 =
+  **input-first numbering + 24k window** (uses existing data, fixes the misalignment, fits
+  current DDP, ~2h). Training/inference windows are INDEPENDENT: Jetson still feeds the FULL
+  contract at inference; the open question is whether a ≤24k-trained model generalizes to
+  copy placeholders that appear DEEP (>24k) in the input.
+- **v5 re-test plan (Jetson, at full inference window):** ① **party/org slot alignment** —
+  should be FIXED (the confirmed blocker); ② **deep-fact coverage** — can it copy a `[NUM]`
+  at ~60k chars (e.g. the 79,325 sq ft), or does it miss/invent (guardrail backstops
+  invention)? Expectation: ① fixed; ② likely limited by the 24k training length (24k≈6k
+  tokens; positions beyond that are past what it trained on) — MEASURE it. Only if ② is
+  inadequate → **v6** = rebuild full-text corpus + ZeRO-3 long-context (do NOT pre-invest).
+- If v5 passes ① (and ② is acceptable) → switch to v5, `mode="delex"` default, retire v2.
+  v2 was only ever the 8-K *style* model; obsolete once a delex adapter aligns (extraction/
+  DD, if ever needed, use the plain base, never v2).
 
 ## Later / optional (recommended order: A, scoped-AMBER)
 - **A — scale corpus** to ~3,000+ pairs (~300 more small/mid-cap companies; edit

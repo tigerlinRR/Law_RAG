@@ -19,8 +19,12 @@ Read these first on every session (they carry the state across cleared chats):
 - **Reply to the user in Chinese.**
 - **Never commit**: `data/`, `storage/`, `README.zh-CN.md` (English `README.md` only to
   GitHub), or `Richtech Materials for Potential AI Training.docx`. (All gitignored.)
-- 8-K drafting: facts always from the source document (RAG), never fine-tuned in; every
-  draft needs lawyer sign-off. The style adapter learns *how/what to disclose*, not facts.
+- 8-K drafting: **facts never come from the model** — they come from the source document
+  (extraction/delex + deterministic backfill), and the `lawrag.guardrail` RED-blocks any
+  figure not grounded in the source. The fine-tuned adapter provides only *structure/style*
+  (v4/v5 delex adapters emit typed placeholders, never real values). Every draft needs
+  lawyer sign-off. **Live model + drafting-mode status changes often — check `progress.md`
+  for which model is served (v2 interim vs v4/v5 delex) and the current default `mode`.**
 - After editing `lawrag/*.py`: restart the web server and verify with a real HTTP
   request (no hot-reload).
 
