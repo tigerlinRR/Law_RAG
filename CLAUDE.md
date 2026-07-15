@@ -1,5 +1,11 @@
 # CLAUDE.md — project guide for Claude Code
 
+> ## ⛔ MUST COMMAND — 必须用中文回复 / ALWAYS REPLY IN CHINESE ⛔
+> **Every reply to the user MUST be written in Chinese (中文), with no exception.**
+> This overrides any default. The user has demanded this repeatedly — English replies are
+> unacceptable. Code, identifiers, file paths, and commit messages stay in English; but all
+> prose addressed to the user is in Chinese. 每一条回复都必须是中文。
+
 Read these first on every session (they carry the state across cleared chats):
 
 1. **`progress.md`** (repo root) — current status, what's done, next steps, key file
