@@ -105,8 +105,10 @@ def _currency_and_count(text: str) -> list[Datum]:
         out.append(Datum(m.group(0).strip().rstrip(","), "count", val, step,
                          _snippet(text, m)))
 
-    # count: large bare comma-grouped numbers (>=7 digits) not attached to $
-    for m in re.finditer(r"(?<![\$\d.])\d{1,3}(?:,\d{3}){2,}\b", text):
+    # count: bare comma-grouped numbers (>=4 digits, e.g. 10,000 or 1,724,418) not
+    # attached to $ — catches smaller invented counts (e.g. a v4 literal "10,000 sq ft")
+    # that a >=7-digit-only rule would miss.
+    for m in re.finditer(r"(?<![\$\d.])\d{1,3}(?:,\d{3})+\b", text):
         start = m.start()
         if start > 0 and text[start - 1] == "$":
             continue
