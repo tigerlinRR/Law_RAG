@@ -17,14 +17,30 @@ _client = OpenAI(base_url=CONFIG.llm_base_url, api_key="not-needed-local")
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=2, max=30))
-def _create(**kwargs):
+def _create(_client_override=None, **kwargs):
     """Chat completion with retry on transient (network) errors only."""
-    return _client.chat.completions.create(**kwargs)
+    return (_client_override or _client).chat.completions.create(**kwargs)
 
 
-def chat(system: str, user: str, temperature: float = 0.1, max_tokens: int = 2048) -> str:
+_clients: dict[str, OpenAI] = {}
+
+
+def _client_for(base_url: str | None) -> OpenAI:
+    """Reuse one OpenAI client per base_url (e.g. the v4 endpoint on :8013)."""
+    if not base_url or base_url == CONFIG.llm_base_url:
+        return _client
+    if base_url not in _clients:
+        _clients[base_url] = OpenAI(base_url=base_url, api_key="not-needed-local")
+    return _clients[base_url]
+
+
+def chat(system: str, user: str, temperature: float = 0.1, max_tokens: int = 2048,
+         base_url: str | None = None, model: str | None = None) -> str:
+    """Plain chat. `base_url`/`model` override the default endpoint (used to reach the v4
+    delex adapter on its own port while extraction/DD stay on the main model)."""
     resp = _create(
-        model=CONFIG.llm_model,
+        _client_override=_client_for(base_url),
+        model=model or CONFIG.llm_model,
         messages=[{"role": "system", "content": system},
                   {"role": "user", "content": user}],
         temperature=temperature,

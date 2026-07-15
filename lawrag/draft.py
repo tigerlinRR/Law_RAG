@@ -23,6 +23,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from . import guardrail, llm, retrieve
+from .config import CONFIG
 from .summarize import CHECKLIST as _DEFAULT_CHECKLIST
 from .summarize import review_contract, verify_quote
 
@@ -604,7 +605,21 @@ def draft_8k(
         _derive_share_count(review)
 
     precedent_citations: list[str] = []
-    if mode == "assemble":
+    if mode == "delex":
+        # v4: delex the source -> the model emits a placeholder skeleton (cannot write a
+        # real value) -> backfill placeholders from the source map. Facts come from the
+        # source, structure from the model. Requires v4 served (config.llm_v4_*).
+        from . import delex_backfill as _bf
+        full_text = review.get("_full_text", "")
+        delexed, smap = _bf.delex_source(full_text[:_bf.SOURCE_WINDOW])
+        skeleton = llm.chat(
+            _bf.SYSTEM,
+            f"Draft the Item {item} disclosure.\n\n=== SOURCE DOCUMENT ===\n{delexed}",
+            temperature=0.0, max_tokens=2048,
+            base_url=CONFIG.llm_v4_base_url, model=CONFIG.llm_v4_model)
+        disclosure, missing = _bf.backfill(skeleton, smap)
+        result = {"disclosure": disclosure, "facts_used": [], "_backfill_missing": missing}
+    elif mode == "assemble":
         # A) FACT-LOCKED: assemble from verified facts; the model writes no prose at all.
         disc, facts = _assemble_disclosure(item, review, item_title)
         result = {"disclosure": disc, "facts_used": facts}
@@ -653,6 +668,14 @@ def draft_8k(
     # Fact-fidelity guardrail on the (figure-locked) disclosure.
     result["_guardrail"] = guardrail.reconcile(
         result["disclosure"], full_text, derived=review.get("_derived"))
+    # v4/delex: a placeholder v4 emitted that the source map lacked is a fact NOT in the
+    # source -> BLOCK (composes with the reconciliation guardrail's RED logic).
+    for ph in result.get("_backfill_missing") or []:
+        result["_guardrail"]["items"].append(
+            {"raw": ph, "normalized": ph, "kind": "placeholder",
+             "status": "fabricated", "source_snippet": None})
+    if result.get("_backfill_missing"):
+        result["_guardrail"]["verdict"] = "blocked"
     # Keep the source text + anchored derivations so an edited draft can be re-verified
     # in-app (POST /reverify) without re-parsing the contract.
     result["_source_text"] = full_text

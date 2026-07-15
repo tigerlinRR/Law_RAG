@@ -37,9 +37,13 @@ class Config:
     chunk_chars: int = _int("CHUNK_CHARS", 1200)
     chunk_overlap: int = _int("CHUNK_OVERLAP", 150)
 
-    # LLM (vLLM Qwen3.6-35B) — due-diligence summarization / extraction
+    # LLM (vLLM Qwen3.6-35B) — due-diligence summarization / extraction + drafting
     llm_base_url: str = os.getenv("LLM_BASE_URL", "http://localhost:8012/v1")
     llm_model: str = os.getenv("LLM_MODEL", "qwen3.6")
+    # v4 delexicalized adapter (separate endpoint, coexists with the above for rollback):
+    # emits placeholders only; used for mode="delex" drafting, backfilled from the source.
+    llm_v4_base_url: str = os.getenv("LLM_V4_BASE_URL", "http://localhost:8013/v1")
+    llm_v4_model: str = os.getenv("LLM_V4_MODEL", "qwen3.6-8k-v4")
     # Rough char budget for a single LLM pass (~4 chars/token, 32k ctx, leave room).
     llm_max_ctx_chars: int = _int("LLM_MAX_CTX_CHARS", 90000)
 
