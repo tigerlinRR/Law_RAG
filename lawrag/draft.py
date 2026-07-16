@@ -672,6 +672,7 @@ def draft_8k(
     if _needs_forward_looking_statements(result["disclosure"]):
         result["_forward_looking_statements"] = _FORWARD_LOOKING_STATEMENTS
     result["_compliance"] = _compliance_flags(item, result["disclosure"])
+    result["_repaired"] = review.get("_repaired")  # count of verify-gated 2nd-pass repairs
     # Fact-fidelity guardrail on the (figure-locked) disclosure.
     result["_guardrail"] = guardrail.reconcile(
         result["disclosure"], full_text, derived=review.get("_derived"))

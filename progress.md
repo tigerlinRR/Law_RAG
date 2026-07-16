@@ -295,6 +295,36 @@ helps.**
   guardrail catches fabrication. Scratchpad measure scripts are EPHEMERAL — logic is
   captured here + will fold into `training/llamafactory/delex.py` when v5 is built.
 
+## ARCHITECTURE DECIDED + extraction quality lever shipped (2026-07-16)
+After a full strategic review of v1→v5 (see the bilingual **`8K_DRAFTING_FINDINGS_REPORT.md`**),
+the production architecture is settled and the first quality improvement is built.
+- **Decision:** the spine is **`draft_8k(mode="hybrid")` = v1 (model drafts on RAG-extracted
+  facts) + guardrail** (already the code default). Reframe: **model UNDERSTANDS/extracts, code
+  GENERATES; facts never come from model weights.** `assemble` = optional max-safety mode, NOT
+  default. **v2 adapter + delex/v5 = optional layers, NOT the core; no further model training on
+  the critical path.** The remaining gap is an INFORMATION problem (facts absent from the source),
+  addressed by extraction completeness + human supplements — not by training.
+  - v1 tested fact-clean; v2→v5 chased human-like STYLE only. Style is obtainable WITHOUT
+    fine-tuning: deterministic EDGAR export (structure) + prompt/rubric (tone) + facts-stripped
+    few-shot from the customer's filings. **Recommend serving the BASE model for generation**
+    (lower non-numeric narrative-fabrication risk than the v2 adapter, which `_lock_figures`
+    can't catch). NOTE: :8012 currently still serves the v2 adapter (`qwen3.6-8k`); switching to
+    base is a deploy decision (docker) left for the user — hybrid+guardrail works with either.
+- **#1 lever shipped — verify-gated extraction repair** (`summarize._repair_extraction`, wired
+  into `review_contract`): after the first pass, clauses with a value whose quote FAILED
+  verification, or still 'Not found', get a targeted 2nd pass; a repair is accepted ONLY if the
+  new quote verifies against the source → improves fidelity AND completeness, never invents.
+  Also added map-reduce **window overlap** for long docs. `_repaired` count surfaced on the
+  review + draft result.
+- **Verified E2E** on the real 2025-04-14 PSA (1.01, L&R Investment / 2975 Lincoln Rd / $4.1M):
+  extraction filled 16/26, **verified 15/16, repair fixed 4**; `draft_8k` hybrid →
+  **guardrail CLEAN, 0 blanked figures, all 6 compliance checks pass**, fluent EDGAR-style
+  disclosure with every number (incl. 20,200 sq ft, 1.26 acres, 5.0% commission) grounded.
+  Web server restarted + HTTP-verified after the `lawrag/*.py` edits.
+- **Next roadmap levers (no training):** #2 gap-fill/supplements UX (guardrail RED → fillable
+  form), #3 per-customer/deal materiality rubric, #4 tone via facts-stripped few-shot, #5
+  multi-doc, #6 scoped-AMBER + narrative-claim check, #7 free base-model upgrades.
+
 ## delex fixes + corpus filter shipped — delex fits 2.03/3.02, NOT the 1.01 core (2026-07-16)
 Did the Jetson-side work (no RTX needed): fixed delex quality + built the groundability
 filter. Both are in the repo (pushed). **RTX handoff (tables + commands): `training/DELEX_V5_FINDINGS.md`.**

@@ -118,6 +118,66 @@ def _extract_pass(text: str, checklist: list[str]) -> dict:
                           max_tokens=max_tokens)
 
 
+def _repair_extraction(full: str, result: dict, checklist: str) -> int:
+    """Second, VERIFY-GATED extraction pass — the #1 quality lever.
+
+    Targets clauses that are (a) present but whose quote did NOT verify (the model
+    paraphrased instead of copying — the observed near-miss failure mode), or (b) still
+    'Not found' (a first-pass miss). Asks the model to return the EXACT verbatim quote for
+    just those fields, and accepts a repair ONLY if the new quote verifies against the
+    source. So it improves fidelity AND completeness while NEVER inventing: an unverifiable
+    answer is rejected, not written. Returns the count of repaired clauses."""
+    by_name = {cl.get("name", ""): cl for cl in result.get("clauses", [])}
+    targets: list[str] = []
+    for name in checklist:
+        cl = by_name.get(name)
+        if cl is None or cl.get("value", "").strip().lower() in ("", "not found"):
+            targets.append(name)                     # completeness: (re)try a missed field
+        elif not cl.get("verified", False):
+            targets.append(name)                     # fidelity: repair a drifted quote
+    if not targets:
+        return 0
+    schema = {
+        "type": "object",
+        "properties": {"fields": {
+            "type": "array", "maxItems": len(targets),
+            "items": {"type": "object", "properties": {
+                "name": {"type": "string", "maxLength": 80},
+                "value": {"type": "string", "maxLength": 300},
+                "quote": {"type": "string", "maxLength": 500},
+            }, "required": ["name", "value", "quote"]}}},
+        "required": ["fields"]}
+    block = "\n".join(f"- {t}" for t in targets)
+    user = (
+        "For EACH field below, find the single sentence in the contract that states it and "
+        "copy that sentence VERBATIM into 'quote' (exact characters, no paraphrase, no "
+        "summarizing); put the concise extracted fact in 'value'. If a field is genuinely "
+        "absent from the contract, set value to 'Not found' and quote to ''. Do NOT guess.\n\n"
+        f"FIELDS:\n{block}\n\n=== CONTRACT TEXT ===\n{full}")
+    try:
+        out = llm.chat_json(_SYSTEM, user, schema,
+                            max_tokens=min(12000, 2048 + 300 * len(targets)))
+    except Exception:
+        return 0
+    repaired = 0
+    for f in out.get("fields", []):
+        name = f.get("name", "")
+        newv = _scrub_redactions(f.get("value", "") or "")
+        newq = f.get("quote", "") or ""
+        if newv.strip().lower() in ("", "not found") or not verify_quote(newq, full):
+            continue                                 # reject anything unverifiable
+        cl = by_name.get(name)
+        if cl is None:
+            cl = {"name": name}
+            result["clauses"].append(cl)
+            by_name[name] = cl
+        # only overwrite when this is a genuine improvement (was missing or unverified)
+        if cl.get("value", "").strip().lower() in ("", "not found") or not cl.get("verified"):
+            cl.update(value=newv, quote=newq, verified=True)
+            repaired += 1
+    return repaired
+
+
 def _merge(partials: list[dict], checklist: list[str]) -> dict:
     """Reduce step for map-reduce: keep the first substantive value per clause."""
     merged = {"doc_type": "", "summary": "", "parties": [], "clauses": [], "key_risks": []}
@@ -155,12 +215,15 @@ def review_contract(path: str | Path, checklist: list[str] | None = None) -> dic
     blocks = parse(path)
     full = "\n\n".join(b.text for b in blocks)
 
-    if len(full) <= CONFIG.llm_max_ctx_chars:
+    single_window = len(full) <= CONFIG.llm_max_ctx_chars
+    if single_window:
         result = _extract_pass(full, checklist)
     else:
-        # Split into overlapping windows and map-reduce.
+        # Split into OVERLAPPING windows and map-reduce (overlap avoids missing a fact
+        # that straddles a window boundary).
         step = CONFIG.llm_max_ctx_chars
-        windows = [full[i:i + step] for i in range(0, len(full), step)]
+        overlap = min(2000, step // 5)
+        windows = [full[i:i + step] for i in range(0, len(full), max(1, step - overlap))]
         result = _merge([_extract_pass(w, checklist) for w in windows], checklist)
 
     result["parties"] = [_scrub_redactions(p) for p in result.get("parties", [])]
@@ -171,6 +234,11 @@ def review_contract(path: str | Path, checklist: list[str] | None = None) -> dic
         cl["value"] = _scrub_redactions(cl.get("value", ""))
         if cl.get("value", "").strip().lower() not in ("", "not found"):
             cl["verified"] = verify_quote(cl.get("quote", ""), full)
+
+    # #1 quality lever: verify-gated repair pass (fixes drifted quotes + retries misses).
+    # Only when the whole doc fits one window, so the repair sees the full source at once.
+    if single_window:
+        result["_repaired"] = _repair_extraction(full, result, checklist)
 
     result["_source"] = path.name
     result["_pages"] = max((b.page or 0 for b in blocks), default=0) or None

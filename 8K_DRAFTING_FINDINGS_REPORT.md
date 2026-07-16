@@ -139,6 +139,48 @@ result, that together converge on the answer. But the answer is **not v5**. It i
 understands, code generates, humans fill the gaps, the guardrail backstops.**
 
 ---
+
+## Refined conclusion (after discussion, 2026-07-16)
+
+- **v1 was fact-clean in its held-out tests.** v2→v5 were driven *only* by wanting more
+  human-like STYLE (less "AI-sounding"). That style chase — not any fact problem — is what led
+  down the fine-tune/delex detour. Going back to the v1 spine is correct.
+- **Production default = `hybrid` = v1 (model drafts on RAG-extracted facts) + guardrail** (this
+  is already the code default in `draft_8k`). **`assemble` (code-authored prose) is an OPTIONAL
+  max-safety mode, NOT the default** — v1's generated prose tested fact-clean, so it is not
+  required to remove the model from prose.
+- **Why keep the guardrail** (vs raw v1): not because v1 cheats, but as cheap, zero-GPU insurance
+  for edge cases the small v1 test set didn't cover — a *derivable-but-unstated* figure (the one
+  real generative temptation), verbatim-quote drift, redacted/odd documents. It turns "hope it
+  copied the facts" into "no ungrounded figure can survive."
+- **The human-like STYLE that motivated fine-tuning is obtainable WITHOUT fine-tuning:**
+  deterministic EDGAR export (structure) + prompt/materiality-rubric (brevity/tone) + facts-
+  stripped few-shot exemplars from the customer's own past 8-Ks. Fine-tuning's marginal style
+  gain (ROUGE 0.246→0.464) is not worth its fabrication/leakage risk.
+- **Model choice for generation:** hybrid+guardrail works with either the plain **base** model or
+  the v2 style adapter. The **base model carries lower non-numeric narrative-fabrication risk**
+  (the v2 adapter once leaked an "S-3 registered offering" story from training memory, which
+  `_lock_figures` — numbers only — will NOT catch). **Recommend the base model for generation;**
+  style via prompt/rubric/exemplars.
+- **The architecture is settled; quality improvement is NOT over** — it moves from "train a better
+  generator" (dead end) to the components that actually gate quality.
+
+### Improvement roadmap (none of these require model training)
+
+| # | Lever | Improves | ROI |
+|---|---|---|---|
+| 1 | **Extraction completeness/reliability** (self-verifying re-extraction, derivable figures, agreement-name/doc_type, OCR) | fewer `[NOT IN SOURCE]` gaps → fuller auto-draft | ★★★ highest |
+| 2 | **Gap-fill / supplements UX** (guardrail RED → fillable form, remembered, inline business context) | "close to publishable" from the user's view | ★★★ |
+| 3 | **Materiality rubric** per-customer / per-deal-type | which terms to disclose | ★★ |
+| 4 | **Tone via retrieval** (facts-stripped few-shot from customer filings) | human-like tone, safely | ★★ |
+| 5 | **Multi-document composition** (contract + news + supplements → multi-Item) | broader coverage | ★★ |
+| 6 | **Guardrail depth** (scoped AMBER for omissions; non-numeric narrative-claim check) | catches "forgot to disclose" + narrative fabrication | ★★ |
+| 7 | **Upgrade the base extraction model freely** (no retrain, since extraction is verifiable) | comprehension quality scales for free | ★★ |
+
+**Being fine-tune-free is now an advantage:** improvements are Jetson-side code/prompt/UX — fast,
+cheap, iterable — and a stronger base model can be swapped in at any time with zero retraining.
+
+---
 ---
 
 # 8-K 自动起草 — 结论报告与推荐架构（中文）
@@ -248,3 +290,36 @@ v1→v5 是同一种范式：**「模型生成 → 我们约束」**，永远在
 
 路径**没有错**——是五次正确的实验，各自得出有价值的否定结论，共同收敛到答案。但答案**不是 v5**，
 而是：**模型理解、代码生成、人工补缺、护栏兜底。**
+
+## 精炼结论（讨论后，2026-07-16）
+
+- **v1 在 held-out 测试里事实是干净的。** v2→v5 纯粹是为了「文风更像人写、别像 AI」——是这个风格
+  追求（而非任何事实问题）把我们带上了微调/delex 的弯路。回到 v1 主干是对的。
+- **生产默认 = `hybrid` = v1（模型基于 RAG 抽取的事实起草）+ 护栏**（`draft_8k` 里已是默认）。
+  **`assemble`（代码撰写 prose）是可选的最高安全模式，不作默认**——v1 生成的 prose 已验证事实干净，
+  没必要把模型从 prose 里拿掉。
+- **为什么保留护栏**（而非裸 v1）：不是因为 v1 作弊，而是给 v1 小测试集没覆盖的边角情况上一层零 GPU
+  成本的保险——「可推导但没写明」的数字（生成式唯一真正的诱惑点）、逐字引用漂移、涂黑/异常文档。
+  把「寄希望它照抄了」变成「未接地的数字进不去」。
+- **当初逼你微调的「人味」，不微调也能拿到：** 确定性 EDGAR 导出（结构）+ 提示词/材料性 rubric
+  （简洁/tone）+ 客户自己历史 8-K 的剥离事实 few-shot 样例。微调那点边际风格提升（ROUGE
+  0.246→0.464）不值它的编造/泄漏风险。
+- **生成用哪个模型：** hybrid+护栏 用 **base** 或 v2 适配器都行。但 **base 的非数字叙事编造风险更低**
+  （v2 适配器曾从训练记忆里泄漏「S-3 注册发行」的故事，而 `_lock_figures` 只锁数字、抓不住它）。
+  **建议生成用 base 模型**，风格靠提示词/rubric/样例。
+- **架构定了，但质量改进远没结束**——只是从「训练更好的生成器」（死路）转到真正决定质量的组件上。
+
+### 改进 roadmap（全部不需要训练模型）
+
+| # | 杠杆 | 提升 | ROI |
+|---|---|---|---|
+| 1 | **抽取完整度/可靠性**（自校验重抽、可推导数字、协议名/doc_type、OCR）| 减少 `[NOT IN SOURCE]` 红格 → 草稿更饱满 | ★★★ 最高 |
+| 2 | **补录/supplements UX**（护栏红格→可填表单、记忆、内联业务背景）| 用户视角「接近可发布」| ★★★ |
+| 3 | **材料性 rubric** 按客户/交易类型 | 披露哪些条款 | ★★ |
+| 4 | **tone via 检索**（客户 filing 剥离事实 few-shot）| 安全地拿到人味 | ★★ |
+| 5 | **多文档合成**（合同 + 新闻 + 补充 → 多 Item）| 覆盖更广 | ★★ |
+| 6 | **护栏加深**（scoped AMBER 抓漏披露；非数字叙事编造检测）| 抓「忘了披露」+ 叙事编造 | ★★ |
+| 7 | **随时升级抽取用 base 模型**（可校验，故无需重训）| 理解质量白涨 | ★★ |
+
+**「不微调」现在成了优势：** 改进都在 Jetson 侧的代码/提示词/UX——快、便宜、可迭代——而且随时能换更强
+的 base 模型，零重训。
