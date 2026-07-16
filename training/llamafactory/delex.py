@@ -7,12 +7,14 @@ regex), person names (spaCy PERSON + stoplist). Consistent typed indexed placeho
 across instruction+input+output. Backfill happens on Jetson.
 Usage: python delex.py --sample 3 | python delex.py
 """
-import argparse, gzip, json, re, random
+import argparse, gzip, json, os, re, random
 from pathlib import Path
 import spacy
 
-SRC = Path("/home/thematrix/Law_RAG/training/dataset/train_pairs.jsonl.gz")
-OUT = Path("/mnt/raid/law_rag_8k/data_v4")
+# Env-overridable so RTX can point at the filtered v5 dataset without editing this file:
+#   DELEX_SRC=training/dataset/train_pairs_delex_filtered.jsonl.gz DELEX_OUT=/mnt/raid/law_rag_8k/data_v5 python delex.py
+SRC = Path(os.getenv("DELEX_SRC", "/home/thematrix/Law_RAG/training/dataset/train_pairs.jsonl.gz"))
+OUT = Path(os.getenv("DELEX_OUT", "/mnt/raid/law_rag_8k/data_v4"))
 SYSTEM = ("You are a securities lawyer drafting U.S. SEC Form 8-K Item disclosures. "
           "Write in the concise, neutral style of a real filing, disclosing only "
           "material terms and using only facts present in the provided source document.")

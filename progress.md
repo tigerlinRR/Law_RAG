@@ -297,7 +297,7 @@ helps.**
 
 ## delex fixes + corpus filter shipped — delex fits 2.03/3.02, NOT the 1.01 core (2026-07-16)
 Did the Jetson-side work (no RTX needed): fixed delex quality + built the groundability
-filter. Both are in the repo (pushed).
+filter. Both are in the repo (pushed). **RTX handoff (tables + commands): `training/DELEX_V5_FINDINGS.md`.**
 - **`training/llamafactory/delex.py` fixed** — three changes, all backfill-consistent:
   1. **input-first numbering** in `process()` (was output-first) — THE confirmed wrong-org
      blocker. Inference (`delex_backfill.delex_source`) numbers input-only, so now a
