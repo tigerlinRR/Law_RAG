@@ -738,6 +738,67 @@ function renderDraftInto(r, report, meta) {
   }
   report.appendChild(fc);
 
+  // Supplements — fill each "[NOT IN SOURCE — CONFIRM]" gap with a reviewer-supplied value.
+  // More usable than hunting the placeholder in the textarea: one labelled box per gap, with
+  // the surrounding sentence for context. A filled value is treated as grounded (see the
+  // /supplements endpoint), so the fact check clears once every gap is confirmed.
+  if (meta && meta.id != null) {
+    const PH = "[NOT IN SOURCE — CONFIRM]";
+    const subSections = sections.filter((s) => !s.cross_ref);
+    const gapControls = [];
+    const gapPanel = el("div", "panel gap-panel");
+    gapPanel.appendChild(el("h3", null, "Fill the flagged gaps"));
+    gapPanel.appendChild(el("p", "auto-note",
+      "Figures the model produced that are NOT in the contract were blanked to " +
+      "“[NOT IN SOURCE — CONFIRM]”. If you can confirm the correct value (from a supplement, " +
+      "the counterparty, or your own records), enter it below — it is inserted, recorded as " +
+      "reviewer-supplied (grounded), and the fact check re-runs."));
+    subSections.forEach((s) => {
+      const text = s.disclosure || "";
+      let from = 0, idx = 0, pos;
+      while ((pos = text.indexOf(PH, from)) !== -1) {
+        const cs = Math.max(0, pos - 70), ce = Math.min(text.length, pos + PH.length + 40);
+        const row = el("div", "gap-row");
+        if (subSections.length > 1) row.appendChild(el("div", "gap-item", `Item ${s.item}`));
+        const lbl = el("div", "gap-context");
+        lbl.appendChild(document.createTextNode((cs > 0 ? "…" : "") + text.slice(cs, pos)));
+        lbl.appendChild(el("span", "gap-blank", " ⬚ "));
+        lbl.appendChild(document.createTextNode(text.slice(pos + PH.length, ce) + (ce < text.length ? "…" : "")));
+        row.appendChild(lbl);
+        const inp = el("input", "gap-input");
+        inp.type = "text";
+        inp.placeholder = "correct value (e.g. 8,500,000)";
+        row.appendChild(inp);
+        gapPanel.appendChild(row);
+        gapControls.push({ item: s.item, index: idx, input: inp });
+        from = pos + PH.length; idx += 1;
+      }
+    });
+    if (gapControls.length) {
+      const brow = el("div", "bc-actions");
+      const gb = el("button", "btn-primary", "Fill gaps & re-check");
+      const gstatus = el("span", "auto-note", "");
+      gb.onclick = async () => {
+        const fills = gapControls.filter((g) => g.input.value.trim())
+          .map((g) => ({ item: g.item, index: g.index, value: g.input.value.trim() }));
+        if (!fills.length) { gstatus.textContent = "Enter at least one value."; return; }
+        gb.disabled = true; gstatus.textContent = "Filling…";
+        try {
+          const res = await fetch(`/api/generations/${meta.id}/supplements`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ fills }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.detail || "failed");
+          report.innerHTML = ""; renderDraftInto(data.result, report, meta);
+        } catch (e) { gb.disabled = false; gstatus.textContent = "Failed: " + e.message; }
+      };
+      brow.appendChild(gb); brow.appendChild(gstatus);
+      gapPanel.appendChild(brow);
+      report.appendChild(gapPanel);
+    }
+  }
+
   if (meta && meta.id != null) {
     const bcPanel = el("div", "panel");
     bcPanel.appendChild(el("h3", null, "Business / strategic context (optional)"));

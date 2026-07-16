@@ -331,3 +331,15 @@ table.clauses td.quote .bc-flag { color: var(--accent-dk); font-style: normal; f
   .search-box { flex-direction: column; } .btn-primary { padding: 12px; }
   table.clauses td.quote { display: none; }
 }
+
+/* Supplements — "fill the flagged gaps" panel */
+.gap-panel .gap-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 8px 0; border-top: 1px solid var(--border, #e4e4e4); }
+.gap-panel .gap-row:first-of-type { border-top: none; }
+.gap-item { font-size: 12px; font-weight: 600; color: var(--muted, #667); min-width: 56px; }
+.gap-context { flex: 1 1 340px; font-size: 13px; color: var(--muted, #556); line-height: 1.5; }
+.gap-blank { display: inline-block; padding: 0 6px; border-radius: 3px;
+  background: #fde2c8; color: #8a4b1a; font-weight: 700; }
+.gap-input { flex: 0 1 220px; padding: 7px 9px; border: 1px solid var(--border, #ccc);
+  border-radius: 6px; font-size: 14px; }
+.gap-input:focus { outline: none; border-color: #c77; box-shadow: 0 0 0 2px #f0d0c0; }

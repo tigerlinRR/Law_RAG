@@ -10,6 +10,7 @@ from __future__ import annotations
 import io
 import mimetypes
 import os
+import re
 import shutil
 import tempfile
 from dataclasses import asdict
@@ -252,6 +253,52 @@ def api_add_business_context(gen_id: int, req: BusinessContextReq,
     return {"id": gen_id, "result": updated}
 
 
+def _sections_of(result: dict) -> list[dict]:
+    """The draft's disclosure sections — the multi-Item list, or a single primary Item."""
+    return result.get("_items") or [{
+        "item": result.get("item"), "item_title": result.get("item_title"),
+        "disclosure": result.get("disclosure", ""), "cross_ref": False}]
+
+
+def _recompute_verification(result: dict) -> None:
+    """Re-run the fact guardrail + presence/FLS checks against the stored source, in place.
+    Shared by /reverify (after text edits) and /supplements (after gap fills). Human-supplied
+    supplement figures live in `_derived_values`, so they reconcile as grounded (non-blocking)
+    rather than being re-flagged as fabricated."""
+    sections = _sections_of(result)
+    src = result.get("_source_text", "")
+    derived = [(Decimal(v), d) for v, d in result.get("_derived_values", [])]
+    body = "\n\n".join(s.get("disclosure", "") for s in sections if not s.get("cross_ref"))
+    target = body or result.get("disclosure", "")
+    result["_guardrail"] = guardrail.reconcile(target, src, derived=derived)
+    # Unfilled placeholders still count as "to fill" (a placeholder isn't a figure the
+    # guardrail flags, but the reviewer must still resolve it).
+    result["_blanked_figures"] = [_FIGURE_PLACEHOLDER] * target.count(_FIGURE_PLACEHOLDER)
+    result["_compliance"] = _compliance_flags(result.get("item", ""),
+                                              result.get("disclosure", ""))
+    if _needs_forward_looking_statements(result.get("disclosure", "")):
+        result["_forward_looking_statements"] = _FORWARD_LOOKING_STATEMENTS
+    else:
+        result.pop("_forward_looking_statements", None)
+
+
+def _replace_nth(text: str, needle: str, repl: str, n: int) -> tuple[str, bool]:
+    """Replace the n-th (0-based) occurrence of `needle` with `repl`."""
+    parts = text.split(needle)
+    if n < 0 or n >= len(parts) - 1:
+        return text, False
+    return needle.join(parts[:n + 1]) + repl + needle.join(parts[n + 1:]), True
+
+
+def _supp_decimal(s: str):
+    """Parse a reviewer-supplied value to a Decimal (strip $/commas/text), else None."""
+    t = re.sub(r"[^0-9.]", "", s or "")
+    try:
+        return Decimal(t) if t not in ("", ".") else None
+    except Exception:
+        return None
+
+
 class ReverifyReq(BaseModel):
     items: list[dict]  # [{"item": "1.01", "disclosure": "<edited text>"}]
 
@@ -264,35 +311,68 @@ def api_reverify(gen_id: int, req: ReverifyReq, user: dict = Depends(current_use
     g = _get_generation_or_404(gen_id, user)
     result = g["result"]
     edits = {e.get("item"): e.get("disclosure", "") for e in req.items}
-    sections = result.get("_items") or [{
-        "item": result.get("item"), "item_title": result.get("item_title"),
-        "disclosure": result.get("disclosure", ""), "cross_ref": False}]
+    sections = _sections_of(result)
     for s in sections:
         if s.get("item") in edits:
             s["disclosure"] = edits[s["item"]]
     result["_items"] = sections
     if result.get("item") in edits:
         result["disclosure"] = edits[result["item"]]
-
-    src = result.get("_source_text", "")
-    derived = [(Decimal(v), d) for v, d in result.get("_derived_values", [])]
-    body = "\n\n".join(s.get("disclosure", "") for s in sections if not s.get("cross_ref"))
-    result["_guardrail"] = guardrail.reconcile(body or result.get("disclosure", ""),
-                                               src, derived=derived)
-    # Keep the banner honest: unfilled placeholders still count as "to fill" even though
-    # a placeholder isn't a figure the guardrail flags.
-    n_ph = (body or result.get("disclosure", "")).count(_FIGURE_PLACEHOLDER)
-    result["_blanked_figures"] = [_FIGURE_PLACEHOLDER] * n_ph
-    result["_compliance"] = _compliance_flags(result.get("item", ""),
-                                              result.get("disclosure", ""))
-    # Recompute the FLS legend against the edited text: if the reviewer removed the
-    # forward-looking language, the legend should disappear (it's not needed on every 8-K).
-    if _needs_forward_looking_statements(result.get("disclosure", "")):
-        result["_forward_looking_statements"] = _FORWARD_LOOKING_STATEMENTS
-    else:
-        result.pop("_forward_looking_statements", None)
+    _recompute_verification(result)
     generations.update_result(gen_id, result)
     auth.log(user["username"], "reverify", f"generation {gen_id}")
+    return {"id": gen_id, "result": result}
+
+
+class SupplementFill(BaseModel):
+    index: int              # 0-based [NOT IN SOURCE — CONFIRM] occurrence in the item's text
+    value: str
+    item: str | None = None
+
+
+class SupplementsReq(BaseModel):
+    fills: list[SupplementFill]
+
+
+@app.post("/api/generations/{gen_id}/supplements")
+def api_supplements(gen_id: int, req: SupplementsReq,
+                    user: dict = Depends(current_user)) -> dict:
+    """Fill the flagged gaps -- the `[NOT IN SOURCE — CONFIRM]` placeholders the guardrail
+    blanked -- with reviewer-supplied values. A supplied value is a fact the reviewer
+    vouches for that the contract does not state; it is recorded as a grounded supplement
+    (added to `_derived_values`, so the guardrail treats it as grounded/non-blocking, like a
+    derivation) and substituted into the disclosure. Then re-reconciles so the banner clears."""
+    g = _get_generation_or_404(gen_id, user)
+    result = g["result"]
+    sections = _sections_of(result)
+    fills_by_item: dict[str, list[SupplementFill]] = {}
+    for f in req.fills:
+        fills_by_item.setdefault(f.item or result.get("item"), []).append(f)
+    supplements = result.get("_supplements", [])
+    derived = result.get("_derived_values", [])
+    for s in sections:
+        disc = s.get("disclosure", "")
+        # apply highest index first so earlier occurrences' positions stay valid
+        for f in sorted(fills_by_item.get(s.get("item"), []), key=lambda x: -x.index):
+            val = (f.value or "").strip()
+            if not val:
+                continue
+            disc, ok = _replace_nth(disc, _FIGURE_PLACEHOLDER, val, f.index)
+            if ok:
+                supplements.append({"value": val, "item": s.get("item")})
+                num = _supp_decimal(val)
+                if num is not None:
+                    derived.append([str(num), f"supplied by reviewer: {val}"])
+        s["disclosure"] = disc
+    result["_items"] = sections
+    for s in sections:
+        if s.get("item") == result.get("item"):
+            result["disclosure"] = s["disclosure"]
+    result["_supplements"] = supplements
+    result["_derived_values"] = derived
+    _recompute_verification(result)
+    generations.update_result(gen_id, result)
+    auth.log(user["username"], "supplements", f"generation {gen_id}")
     return {"id": gen_id, "result": result}
 
 

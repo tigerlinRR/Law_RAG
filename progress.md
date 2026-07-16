@@ -306,10 +306,16 @@ the production architecture is settled and the first quality improvement is buil
   addressed by extraction completeness + human supplements — not by training.
   - v1 tested fact-clean; v2→v5 chased human-like STYLE only. Style is obtainable WITHOUT
     fine-tuning: deterministic EDGAR export (structure) + prompt/rubric (tone) + facts-stripped
-    few-shot from the customer's filings. **Recommend serving the BASE model for generation**
-    (lower non-numeric narrative-fabrication risk than the v2 adapter, which `_lock_figures`
-    can't catch). NOTE: :8012 currently still serves the v2 adapter (`qwen3.6-8k`); switching to
-    base is a deploy decision (docker) left for the user — hybrid+guardrail works with either.
+    few-shot from the customer's filings.
+- **SWITCHED PRODUCTION TO THE BASE MODEL (2026-07-16).** `:8012` now serves the plain base
+  `unsloth/Qwen3.6-35B-A3B-NVFP4` (served-name `qwen3.6`, container `lawrag-llm`); `.env`
+  `LLM_MODEL=qwen3.6`. v2 adapter container `lawrag-llm-8k` STOPPED but kept for rollback
+  (`docker start lawrag-llm-8k` + set `.env` back to `qwen3.6-8k`; `.env.bak-8k` is the old env).
+  **A/B on the real 2025-04-14 PSA — base BEATS the v2 adapter on the accuracy-first spine:**
+  extraction filled 17/26 vs 16, **verified 17/17 vs 15/16**, needed 1 repair vs 4; hybrid draft
+  guardrail CLEAN for both, base has NO `<think>` leak (guided_json constrains it) and lower
+  narrative-fabrication risk. Only ONE model fits at 0.5 gpu-util, so this is a swap not a
+  co-serve. Extraction also uses `:8012`, so base improves extraction too.
 - **#1 lever shipped — verify-gated extraction repair** (`summarize._repair_extraction`, wired
   into `review_contract`): after the first pass, clauses with a value whose quote FAILED
   verification, or still 'Not found', get a targeted 2nd pass; a repair is accepted ONLY if the
@@ -321,9 +327,17 @@ the production architecture is settled and the first quality improvement is buil
   **guardrail CLEAN, 0 blanked figures, all 6 compliance checks pass**, fluent EDGAR-style
   disclosure with every number (incl. 20,200 sq ft, 1.26 acres, 5.0% commission) grounded.
   Web server restarted + HTTP-verified after the `lawrag/*.py` edits.
-- **Next roadmap levers (no training):** #2 gap-fill/supplements UX (guardrail RED → fillable
-  form), #3 per-customer/deal materiality rubric, #4 tone via facts-stripped few-shot, #5
-  multi-doc, #6 scoped-AMBER + narrative-claim check, #7 free base-model upgrades.
+- **#2 lever shipped — supplements / gap-fill UX.** Each `[NOT IN SOURCE — CONFIRM]` blank the
+  guardrail left is now a labelled input (with the surrounding sentence for context) in a "Fill
+  the flagged gaps" web panel (`web/app.js` + `.gap-*` CSS). `POST /api/generations/{id}/supplements`
+  substitutes the reviewer's value into the disclosure AND records it in `_derived_values` so the
+  guardrail treats it as GROUNDED (like a derivation: review-required, non-blocking) instead of
+  re-flagging it as fabricated. `reverify` + supplements now share `_recompute_verification`.
+  Verified: logic (fill → verdict needs_review, blanks 0), route (401 unauth / 200 authed), and a
+  full HTTP login→generate→(clean)→delete E2E on the base model.
+- **Next roadmap levers (no training):** #3 per-customer/deal materiality rubric, #4 tone via
+  facts-stripped few-shot, #5 multi-doc, #6 scoped-AMBER + narrative-claim check, #7 free
+  base-model upgrades.
 
 ## delex fixes + corpus filter shipped — delex fits 2.03/3.02, NOT the 1.01 core (2026-07-16)
 Did the Jetson-side work (no RTX needed): fixed delex quality + built the groundability
