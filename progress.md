@@ -295,6 +295,50 @@ helps.**
   guardrail catches fabrication. Scratchpad measure scripts are EPHEMERAL — logic is
   captured here + will fold into `training/llamafactory/delex.py` when v5 is built.
 
+## delex fixes + corpus filter shipped — delex fits 2.03/3.02, NOT the 1.01 core (2026-07-16)
+Did the Jetson-side work (no RTX needed): fixed delex quality + built the groundability
+filter. Both are in the repo (pushed).
+- **`training/llamafactory/delex.py` fixed** — three changes, all backfill-consistent:
+  1. **input-first numbering** in `process()` (was output-first) — THE confirmed wrong-org
+     blocker. Inference (`delex_backfill.delex_source`) numbers input-only, so now a
+     placeholder the model copies resolves to the same source value.
+  2. **lossless value canon** — `canon_num` unit-expands `$X million`→digits + strips
+     format; new `canon_date`→ISO. So `$38.7 million`==`$38,700,000`, `August 20, 2024`==
+     `2024-08-20` share ONE placeholder. VALUE-preserving, NOT byte (a within-doc format
+     variant backfills to the canonical form). **Rounding stays distinct** (`$38.7M` ≠
+     `$38,675,000`) — verified `canon_num` equal ⟺ equal value, so no two different
+     material figures ever merge (would be unsafe to backfill). Fuzzy match deliberately
+     NOT used.
+  3. **tightened ORG regex** — connectors are space/comma/& only (no newline) + every token
+     must start with a letter, so a match can't cross a sentence/line boundary or swallow an
+     adjacent date (`On\nAugust 20, 2024, Foo Inc.` no longer captured as one ORG).
+  - `MAX_INPUT=24000` module const; `delex_backfill.SOURCE_WINDOW` now references it (was a
+     hidden 15000 second truncation, tighter than the 24k build cap). `test_delex_backfill.py`
+     roundtrip relaxed to value/content-preserving (whitespace-normalized) — PASS; a changed
+     digit/letter still fails it. Production path (v2, `mode="hybrid"`) does NOT use delex, so
+     unaffected.
+- **`training/llamafactory/delex_filter.py`** — keeps only pairs whose OUTPUT placeholders
+  are ≥threshold grounded in the input (backfillable), using the same delex+24k window as
+  training. Full corpus @0.90: **KEPT 1005/2174 (46%), kept-set mean groundability 99.9%.**
+  Output (gitignored): `data/multico_all/train_pairs_delex_filtered.jsonl`.
+- **DECISIVE by-Item split — delex is Item-dependent:**
+  - transaction Items ground well: **2.03 66/84 (78%), 3.02 61/78 (78%)** — disclosures copy
+    the note/SPA's exact figures.
+  - **1.01 (the CORE) 17/245 (6%), 5.02 1/128 (0%)** — narrative disclosures paraphrase +
+    cite facts outside the exhibit; cannot be delexed.
+  - the 1005 kept are **852 news (2.02/7.01/8.01) + only 153 contract-family**, and contract
+    is almost all 2.03/3.02. News Items are NOT the drafting product.
+- **Recommendation / decision for the user + RTX:**
+  - delex only serves **transactional 2.03/3.02** (Richtech financings/notes — genuinely
+    useful), NOT the narrative **1.01/5.02** core. For 1.01/5.02 the "zero imagination" bar
+    is ALREADY met by `mode="assemble"` (deterministic) / `mode="hybrid"`+guardrail — delex
+    adds nothing there.
+  - **Cheap path if wanted:** RTX trains v5 on the 1005-pair filtered set (input-first, 24k,
+    ~2h DDP — NOT ZeRO-3). Expect it to work for 2.03/3.02+news; re-test on a real Richtech
+    3.02 SPA on Jetson. 1.01/5.02 stay on assemble/hybrid.
+  - **Or shelve delex** entirely since 1.01 is the priority and assemble/hybrid already
+    guarantee no fabrication. Either way, the earlier ZeRO-3 long-context plan is DEAD.
+
 ## Later / optional (recommended order: A, scoped-AMBER)
 - **A — scale corpus** to ~3,000+ pairs (~300 more small/mid-cap companies; edit
   `COMPANIES` in `training/scrape_all_items.py`) and retrain v3 — ONLY if a future need

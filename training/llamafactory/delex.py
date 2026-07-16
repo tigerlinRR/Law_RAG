@@ -29,9 +29,21 @@ REGEX = [
     ("AMOUNT", re.compile(r"\$\s?\d[\d,]*(?:\.\d+)?(?:\s?(?:million|billion|thousand))?", re.I)),
     ("PCT",    re.compile(r"\b\d+(?:\.\d+)?\s?(?:%|percent)\b", re.I)),
     ("NUM",    re.compile(r"\b\d{1,3}(?:,\d{3})+(?:\.\d+)?\b")),
-    # company: a capitalized run (allowing &, commas, periods) ending in a corporate suffix
-    ("ORG",    re.compile(rf"\b[A-Z][\w&.\-]*(?:[\s,&]+(?:[A-Z0-9][\w&.\-]*|and)){{0,6}}[\s,]+{CORP}\b\.?")),
+    # company: a capitalized run ending in a corporate suffix. Connectors are space/comma/&
+    # ONLY (no newline) and every token must start with a LETTER — so the match cannot cross
+    # a sentence/line boundary or swallow an adjacent date ("On\nAugust 20, 2024, Foo Inc.").
+    ("ORG",    re.compile(rf"\b[A-Z][\w&.\-]*(?:[ \t,&]+(?:[A-Z][\w&.\-]*|and)){{0,6}}[ \t,]+{CORP}\b\.?")),
 ]
+# lossless numeric/date normalization so format variants share ONE placeholder
+# ("$38.7 million" == "$38,700,000", "August 20, 2024" == "2024-08-20"). This is
+# VALUE-preserving (not byte-preserving): a within-doc variant collision backfills to the
+# first surface's canonical form — same value, normalized format. Fuzzy/rounding is
+# deliberately NOT merged (would conflate distinct material figures — unsafe to backfill).
+_UNIT = {"thousand": 1e3, "million": 1e6, "billion": 1e9}
+_MIDX = {m: i for i, m in enumerate(
+    ["january", "february", "march", "april", "may", "june", "july",
+     "august", "september", "october", "november", "december"], 1)}
+MAX_INPUT = 24000  # source-doc window (chars) — training AND inference must use the same
 # legal / structural boilerplate that must NEVER be masked (keep as learnable structure)
 STOP = {w.lower() for w in [
     "item", "exhibit", "section", "company", "report", "managers", "manager", "board",
@@ -43,7 +55,39 @@ STOP = {w.lower() for w in [
     "the company", "buyer", "seller", "purchaser", "issuer", "escrow", "closing", "note",
 ]}
 
-def canon_num(s): return re.sub(r"[,\s]", "", s.lower()).rstrip(".")
+def canon_num(s):
+    """Value canon: expand k/m/b units, drop $/commas/spaces/trailing words -> a decimal
+    string, so '$38.7 million' == '38,700,000'. Falls back to the old strip on parse failure."""
+    t = s.lower()
+    mult = 1.0
+    m = re.search(r"(thousand|million|billion)", t)
+    if m:
+        mult = _UNIT[m.group(1)]
+        t = t[:m.start()]
+    d = re.sub(r"[^0-9.]", "", t)
+    if d not in ("", "."):
+        try:
+            v = float(d) * mult
+            return str(int(v)) if v == int(v) else ("%f" % v).rstrip("0").rstrip(".")
+        except ValueError:
+            pass
+    return re.sub(r"[,\s]", "", s.lower()).rstrip(".")
+
+
+def canon_date(s):
+    """Normalize a date surface to ISO YYYY-MM-DD so formats share one placeholder."""
+    x = s.lower()
+    m = re.search(rf"({'|'.join(_MIDX)})\s+(\d{{1,2}}),?\s+(\d{{4}})", x)
+    if m:
+        return f"{int(m.group(3)):04d}-{_MIDX[m.group(1)]:02d}-{int(m.group(2)):02d}"
+    m = re.search(r"(\d{4})-(\d{2})-(\d{2})", x)
+    if m:
+        return f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
+    m = re.search(r"(\d{1,2})/(\d{1,2})/(\d{2,4})", x)
+    if m:
+        y = int(m.group(3)) + (2000 if int(m.group(3)) < 100 else 0)
+        return f"{y:04d}-{int(m.group(1)):02d}-{int(m.group(2)):02d}"
+    return x
 def canon_name(s):
     s = re.sub(r"[,\.]", "", s.lower()).strip()
     s = re.sub(rf"\b(inc|llc|ltd|corp|corporation|company|co|lp|plc|the|holdings|partners|capital|group|trust|bank|na)\b", "", s).strip()
@@ -60,7 +104,7 @@ def collect(text):
                 if is_stop(m.group()): continue
                 spans.append([m.start(), m.end(), "ORG", canon_name(m.group())])
             elif typ == "DATE":
-                spans.append([m.start(), m.end(), "DATE", m.group().lower()])
+                spans.append([m.start(), m.end(), "DATE", canon_date(m.group())])
             else:
                 spans.append([m.start(), m.end(), typ, canon_num(m.group())])
     for e in nlp(text).ents:
@@ -91,9 +135,13 @@ def delexer():
                 text = re.sub(r"\b" + re.escape(core) + r"\b", ph("ORG", can), text)
         return text
     return run, reg
-def process(r, max_input=15000):
+def process(r, max_input=MAX_INPUT):
+    # INPUT-FIRST numbering: delex the source BEFORE the output so input entities claim the
+    # low indices. Inference (delex_backfill.delex_source) also numbers input-only, so a
+    # placeholder the model copies resolves to the same source value. (v4 numbered OUTPUT
+    # first -> indices drifted with many entities -> wrong-org backfill; this is that fix.)
     run, reg = delexer()
-    out = run(r["output"]); inp = run(r["input"][:max_input]); instr = run(r["instruction"])
+    inp = run(r["input"][:max_input]); out = run(r["output"]); instr = run(r["instruction"])
     return {"instruction": instr, "input": inp, "output": out}, reg
 
 def main():

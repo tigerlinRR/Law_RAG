@@ -30,7 +30,7 @@ import delex as _dx  # noqa: E402  (loads spaCy at import — required, identica
 PLACEHOLDER_RE = re.compile(r"\[(?:AMOUNT|NUM|PCT|DATE|ORG|PERSON)_\d+\]")
 CONFIRM_MARKER = "[NOT IN SOURCE — CONFIRM]"
 SYSTEM = _dx.SYSTEM               # the exact system prompt v4 was trained with
-SOURCE_WINDOW = 15000             # chars of source fed to v4 (matches training's max_input)
+SOURCE_WINDOW = _dx.MAX_INPUT     # chars of source fed to the adapter (MUST match training's max_input)
 
 
 def delex_source(text: str) -> tuple[str, dict[str, str]]:
