@@ -5,7 +5,7 @@ Living status doc so a fresh chat can resume fast. Pairs with:
   `MEMORY.md` index; the dense history is in `law-rag-project-plan.md`).
 - **`CLAUDE.md`** (points here) and the repo `README.md` (product/architecture docs).
 
-_Last updated: 2026-07-10._
+_Last updated: 2026-07-16._
 
 ## What this is
 Fully-local, private RAG + drafting system for Richtech's legal counsel, on a Jetson
@@ -250,6 +250,50 @@ answer to "NEVER imagination" (numbers come from deterministic backfill, not the
 - If v5 passes ① (and ② is acceptable) → switch to v5, `mode="delex"` default, retire v2.
   v2 was only ever the 8-K *style* model; obsolete once a delex adapter aligns (extraction/
   DD, if ever needed, use the plain base, never v2).
+- **[SUPERSEDED 2026-07-16 — the "80k window / long-context" idea is DEAD. Measurement
+  below ("WINDOW IS NOT THE BOTTLENECK") shows widening the window buys only +5 pts; the
+  fix is delex-quality + corpus filtering at the current 24k, not a longer window.]**
+
+## v5/window investigation — WINDOW IS NOT THE BOTTLENECK (2026-07-16)
+RTX inferred the residual delex misalignment (canon fix only moved it 39→42.4%) was
+the 24k source truncation, and proposed full-text corpus + ZeRO-3 long-context (v6).
+Jetson tested that premise directly (raw full docs ARE on disk, `data/multico_all/`,
+max 399,888 chars). **The premise is DISPROVEN — widening the training window barely
+helps.**
+- **Rebuilt full-length pairs** non-destructively: `build_training_pairs.py` now reads
+  `MAX_INPUT_CHARS`/`PAIRS_OUT` from env; ran at 120k →
+  `data/multico_all/train_pairs_full.jsonl` (input median 17,564 / max 399,888).
+- **Measured placeholder alignment** (`scratchpad/measure_align.py`: fraction of OUTPUT
+  placeholders whose canonical `(type, value)` also appears in the INPUT window — i.e.
+  the model has a source anchor to copy/backfill). Micro over 297 stratified pairs:
+  - Window **15k→24k→48k→120k = 34.9% → 36.7% → 38.6% → 39.9%** — full text buys only
+    **+5 pts**. Core 1.01: 27.8%→36.3%. Median doc is 17.5k, so the full source is
+    already in view; the missing facts are NOT beyond the window.
+  - **canon (value-aware) lever** (`measure_align2.py`): `$38.7M`↔`$38,675,000` unit
+    expand + ±1% fuzzy + date→(y,m,d). AMOUNT **32.6%→51.8% (+19)**, NUM +8, overall
+    39.9%→**45.2%**. Cheap (edit `delex.py`), ~same total gain as the whole window.
+  - **ORG 33% / PERSON 25% untouched by either** (37% of all placeholders). Probe
+    (`probe_orgper.py`): part is a fixable **greedy ORG regex** (matches cross-sentence
+    junk like `'On\nAugust 20, 2024, Solid Power Operating, Inc.'`), but a real chunk is
+    **structurally absent** — disclosures cite facts NOT in the paired exhibit (director
+    bios' past employers "Ophir Corporation"/"Ball Aerospace", officer names in a plan
+    doc, rounded/paraphrased amounts). No window/canon fixes those.
+- **Conclusion:** the delex-copy ceiling is ~55% even with all cheap fixes, because real
+  8-K disclosures transform/round facts and pull from outside the paired source. **Do NOT
+  invest in ZeRO-3 long-context (v6) — window ≠ bottleneck.** RTX's ZeRO-3 smoke test is
+  fine as an infra capability check; just don't build the full-text training on it.
+- **Revised v5 plan (cheap, Jetson-side, better than naive-v5 AND ZeRO-3):**
+  1. Fix delex quality — greedy ORG regex, value-aware numeric canon, date canon.
+  2. **Filter the corpus to groundable pairs** (keep only pairs whose output placeholders
+     are ≥~85% anchored in the input) so supervision is consistent = "only emit
+     placeholders you can copy" (directly kills the ungroundable-placeholder → wrong-org
+     failure). Measure the KEPT subset's alignment.
+  3. Retrain v5 at the **current 24k window** + input-first numbering on the cleaned,
+     filtered corpus. If kept-subset alignment ≥85% → v5 is trainable & safe; dropped
+     pairs are simply not delex-suitable (route them to guardrail/human).
+- Interim unchanged: **v2 in production** (`docker start lawrag-llm-8k`, `mode="hybrid"`),
+  guardrail catches fabrication. Scratchpad measure scripts are EPHEMERAL — logic is
+  captured here + will fold into `training/llamafactory/delex.py` when v5 is built.
 
 ## Later / optional (recommended order: A, scoped-AMBER)
 - **A — scale corpus** to ~3,000+ pairs (~300 more small/mid-cap companies; edit

@@ -14,7 +14,7 @@ from pathlib import Path
 import os
 ROOT = Path(os.getenv("CORPUS_DIR", Path(__file__).resolve().parent / "corpus"))
 MANIFEST = ROOT / "manifest.jsonl"
-OUT = ROOT / "train_pairs.jsonl"
+OUT = ROOT / os.getenv("PAIRS_OUT", "train_pairs.jsonl")
 SAMPLES = ROOT / "train_samples.txt"
 
 ITEM_TITLE = {
@@ -33,7 +33,7 @@ NEWS_FAMILY = {"2.02", "7.01", "8.01"}
 SRC_NOUN = {"EX-10": "agreement", "EX-2": "agreement", "EX-4": "instrument",
             "EX-1": "agreement", "EX-99": "press release"}
 
-MAX_INPUT_CHARS = 24000   # cap source doc for training input (Qwen ctx budget)
+MAX_INPUT_CHARS = int(os.getenv("MAX_INPUT_CHARS", "24000"))  # cap source doc for training input (Qwen ctx budget)
 MIN_OUTPUT_CHARS = 150    # skip trivial/empty disclosures
 MAX_OUTPUT_CHARS = 12000
 
