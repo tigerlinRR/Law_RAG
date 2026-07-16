@@ -143,6 +143,31 @@ def _ensure_exhibit_qualifier(disclosure: str) -> str:
     return disclosure.rstrip() + "\n\n" + qualifier
 
 
+_ROLE_LABEL_RE = re.compile(
+    r"^\s*(?:seller|purchaser|buyer|company|borrower|lender|investor|holder|issuer|"
+    r"guarantor|lessor|lessee|vendor|supplier|client|counterparty|party|registrant)\s*[:\-–]\s*",
+    re.I)
+
+
+def _clean_party(p: str) -> str:
+    """Strip a leading role label (e.g. 'Seller: ', 'Purchaser - ') from a party string."""
+    return _ROLE_LABEL_RE.sub("", (p or "").strip()).strip()
+
+
+def _pick_counterparty(parties: list[str], company_name: str | None) -> str | None:
+    """Choose the OTHER party for the Item 1.01(c) statement — the one that is NOT the
+    registrant. Blindly taking parties[1] can name the Company itself as its own
+    counterparty (the observed bug); match against the registrant name and skip it."""
+    cleaned = [c for c in (_clean_party(p) for p in parties) if c]
+    norm = lambda s: re.sub(r"[^a-z0-9]", "", (s or "").lower())
+    cn = norm(company_name)
+    for c in cleaned:
+        if cn and (cn in norm(c) or norm(c) in cn):  # this party IS the registrant
+            continue
+        return c
+    return cleaned[1] if len(cleaned) > 1 else (cleaned[0] if cleaned else None)
+
+
 def _ensure_material_relationship(disclosure: str, counterparty: str | None = None) -> str:
     """Item 1.01(c) requires a statement of any material relationship between the
     registrant and a party OTHER THAN the agreement. The model usually writes it
@@ -156,7 +181,7 @@ def _ensure_material_relationship(disclosure: str, counterparty: str | None = No
     instrument = next((t for t in terms if t.strip().lower() not in _PARTY_TERMS), None) \
         or (terms[0] if terms else "Agreement")
     if counterparty and counterparty.strip():
-        cp = counterparty.strip()  # the extracted other party — reliable, not a guess
+        cp = _clean_party(counterparty)  # the extracted other party — reliable, not a guess
     else:
         guess = next(
             (t for t in terms if t.strip().lower() in _PARTY_TERMS
@@ -164,6 +189,7 @@ def _ensure_material_relationship(disclosure: str, counterparty: str | None = No
                                            "sec", "commission"}),
             None)
         cp = f"the {guess}" if guess else "the counterparty"
+    cp = cp.rstrip(".").strip() or "the counterparty"  # avoid "Inc.." — sentence adds its own period
     stmt = (f"Other than in respect of the {instrument}, there is no material "
             f"relationship between the Company and {cp}.")
     # Insert before the closing "qualified in its entirety" sentence if present.
@@ -652,8 +678,8 @@ def draft_8k(
     result["item_title"] = item_title
     disc = result.get("disclosure", "")
     if item == "1.01":
-        _parties = [p for p in review.get("parties", []) if p.strip()]
-        _counterparty = _parties[1] if len(_parties) > 1 else None
+        from .export import REGISTRANT as _REG  # lazy: avoid a circular import at module load
+        _counterparty = _pick_counterparty(review.get("parties", []), _REG.get("name"))
         disc = _ensure_material_relationship(disc, _counterparty)
     disc = _ensure_exhibit_qualifier(disc)
     full_text = review.get("_full_text", "")
