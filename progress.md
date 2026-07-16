@@ -346,11 +346,19 @@ the production architecture is settled and the first quality improvement is buil
   rights, and the customary-provisions catch-all the biased rubric had suppressed** (matching
   what the real filing did). A customer's own style is planned to live in a facts-stripped
   few-shot layer (#4), NOT in the materiality rules.
-- **Next roadmap levers (no training):** #3 build a data-derived, per-deal-type GENERAL rubric
-  from the 2000+ multi-company corpus (Task B — market-norm bands, replaces the neutral prose
-  guidance with measured ones); #4 tone via facts-stripped few-shot from the customer's own
-  filings (the 17 Richtech ones go here); #5 multi-doc; #6 scoped-AMBER + narrative-claim check;
-  #7 free base-model upgrades.
+- **Data-derived GENERAL rubric shipped (Task B, 2026-07-16).** `training/build_general_rubric.py`
+  measures market-norm disclosure rates across the multi-company corpus (deterministic keyword
+  scan, no LLM, deal-type aware). Baked the measured 1.01 bands into `ITEM_RULES` replacing Task
+  A's prose: across **245 real Item 1.01 disclosures (~90 issuers)** — price 89% (ALWAYS);
+  term 60%/asset 55%/closing 46%/conversion 37%/reps 53% (USUALLY, deal-type dependent: debt →
+  interest 58%/conversion 57%; equity → reps 87%/closing 68%); **governing law 0/245, dispute
+  resolution 0.8%, confidentiality 6%, assignment 10% (fold into 'customary provisions')**.
+  Kept earnest money as "include when present" (2% overall is only because few corpus deals are
+  real estate — not a signal to omit it). Verified on the L&R PSA: guardrail CLEAN, complete
+  draft. (2.03/3.02 band data is printed too, for when their ITEM_RULES are added.)
+- **Next roadmap levers (no training):** #4 tone via facts-stripped few-shot from the customer's
+  own filings (the 17 Richtech ones go here); #5 multi-doc; #6 scoped-AMBER + narrative-claim
+  check; #7 free base-model upgrades.
 
 ## delex fixes + corpus filter shipped — delex fits 2.03/3.02, NOT the 1.01 core (2026-07-16)
 Did the Jetson-side work (no RTX needed): fixed delex quality + built the groundability

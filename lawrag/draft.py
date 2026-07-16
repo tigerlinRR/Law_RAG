@@ -257,12 +257,12 @@ _SYSTEM = (
 )
 
 # Mandatory SEC disclosure requirements per Item (Form 8-K rules + the materiality
-# standard from TSC Industries / Basic v. Levinson) PLUS general, COMPANY-NEUTRAL
-# materiality guidance on which commercial terms an 8-K states vs. folds into a
-# "customary provisions" catch-all. Kept vendor-neutral so the tool is not biased to
-# any single issuer's disclosure habits. (A data-derived, per-deal-type rubric built
-# from the multi-company EDGAR corpus is the planned refinement — see progress.md;
-# a specific customer's own style belongs in a facts-stripped few-shot layer, not here.)
+# standard from TSC Industries / Basic v. Levinson) PLUS a COMPANY-NEUTRAL, data-derived
+# materiality rubric: market-norm disclosure rates measured across ~90 public companies'
+# real filings by training/build_general_rubric.py (245 real Item 1.01 disclosures; keyword
+# scan of the corpus, deal-type aware). Vendor-neutral by design, so the tool is not biased
+# to any single issuer's habits. A specific customer's own style belongs in a facts-stripped
+# few-shot layer (roadmap #4), NOT in these materiality rules.
 ITEM_RULES: dict[str, str] = {
     "1.01": (
         "SEC Item 1.01 (Entry into a Material Definitive Agreement) — the disclosure "
@@ -280,31 +280,39 @@ ITEM_RULES: dict[str, str] = {
         "MATERIALITY TEST for (d): a term is material if there is a substantial "
         "likelihood a reasonable shareholder would consider it important — i.e. its "
         "disclosure would significantly alter the 'total mix' of information.\n\n"
-        "MATERIALITY GUIDANCE (general Form 8-K practice — NOT specific to any one "
-        "company):\n"
-        "Include, when present in the contract:\n"
-        "  - the nature of the transaction, in plain language\n"
-        "  - the asset(s) or subject matter, WITH quantitative characteristics "
-        "(square footage, unit count, quantity) and location\n"
-        "  - the price / consideration / financing amount\n"
-        "  - the term / duration / maturity\n"
-        "  - deposit or earnest money, if any\n"
-        "  - for a debt instrument: interest rate / discount and repayment mechanics\n"
-        "  - conversion or exchange terms and redemption rights, if any\n"
-        "  - closing / completion timing and conditions, and any termination right "
-        "that is material to the deal (e.g. a due-diligence termination right and how "
-        "a deposit is handled on termination)\n"
-        "Do NOT describe standard or protective/boilerplate provisions individually "
-        "(governing law, assignment / change-of-control, limitation of liability, "
-        "dispute resolution, representations, warranties, indemnification, "
-        "confidentiality). If worth mentioning at all, collapse them into a brief "
-        "catch-all such as 'and other customary provisions', UNLESS a specific "
-        "provision is genuinely unusual AND material (e.g. an uncapped indemnity, a "
-        "one-sided term).\n"
-        "When this guidance conflicts with your own judgment about clear materiality "
-        "for the specific contract at hand, prefer INCLUDING an arguably-material term "
-        "(omission is the greater risk) — but do not enumerate everything; the goal is "
-        "a brief description of the MATERIAL terms, not a summary of the contract."
+        "MATERIALITY GUIDANCE — market norms measured across 245 real Item 1.01 "
+        "disclosures from ~90 public companies (company-NEUTRAL; directional bands). "
+        "Always state the nature of the transaction, the parties, and the date.\n"
+        "Include the following material commercial terms WHENEVER THE CONTRACT HAS THEM "
+        "(how often each appears in filings reflects deal type — include it if present):\n"
+        "  - price / consideration / financing amount — disclosed in 89% of filings; "
+        "state it whenever present\n"
+        "  - the asset(s) or securities involved, WITH quantitative characteristics "
+        "(square footage, unit/share count, quantity) and location — ~55% overall, 83% "
+        "for equity deals\n"
+        "  - term / duration / maturity — 60% overall, 77% for debt instruments\n"
+        "  - for a DEBT instrument: interest rate / discount and repayment mechanics — "
+        "58% for notes/debt (treat as expected for any note)\n"
+        "  - conversion / exchange / redemption terms — 57% for debt, 37% overall\n"
+        "  - closing / completion timing and conditions — 46% overall, 68% for equity, "
+        "high for real-estate purchases\n"
+        "  - deposit / earnest money — a real-estate term (low overall only because few "
+        "deals are real estate); ALWAYS include it when the contract has one\n"
+        "  - a termination right that is material to the deal (e.g. a due-diligence "
+        "walk-away and how a deposit is handled on termination) — ~29%\n"
+        "Fold these into a brief 'and other customary provisions' catch-all — real "
+        "filings almost never describe them individually, REGARDLESS of deal type, so do "
+        "NOT single them out unless genuinely unusual AND material (e.g. an uncapped "
+        "indemnity, a one-sided term):\n"
+        "  - governing law — stated in 0 of 245 filings\n"
+        "  - dispute resolution / arbitration / venue — 0.8%\n"
+        "  - confidentiality — 6%; assignment / change-of-control — 10%\n"
+        "  - representations, warranties, indemnification, limitation of liability — "
+        "mention only inside the catch-all (a bare 'customary representations, warranties "
+        "and indemnification provisions' is common), never clause-by-clause.\n"
+        "When in doubt, prefer INCLUDING an arguably-material term (omission is the "
+        "greater risk) — but keep it a brief description of the MATERIAL terms, not a "
+        "summary of the contract."
     ),
 }
 
