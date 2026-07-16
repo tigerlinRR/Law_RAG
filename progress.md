@@ -335,9 +335,22 @@ the production architecture is settled and the first quality improvement is buil
   re-flagging it as fabricated. `reverify` + supplements now share `_recompute_verification`.
   Verified: logic (fill → verdict needs_review, blanks 0), route (401 unauth / 200 authed), and a
   full HTTP login→generate→(clean)→delete E2E on the base model.
-- **Next roadmap levers (no training):** #3 per-customer/deal materiality rubric, #4 tone via
-  facts-stripped few-shot, #5 multi-doc, #6 scoped-AMBER + narrative-claim check, #7 free
-  base-model upgrades.
+- **De-biased the materiality rubric (Task A, 2026-07-16).** The 1.01 `ITEM_RULES` rubric was
+  DERIVED FROM 17 Richtech filings ("Richtech's counsel rarely states X", "0 of 10 filings")
+  — a single-issuer bias unfit for a multi-company product. Replaced with **company-neutral
+  general 8-K materiality guidance** (same SEC (a)-(d) requirements + a general "include the
+  material commercial terms, fold boilerplate into 'customary provisions', err toward
+  inclusion" section); removed Richtech-specific hit-rates/deal-type habits from `ITEM_RULES`,
+  the comment block, and the `_SYSTEM` redaction example. **Verified on the L&R PSA: facts still
+  guardrail-CLEAN, and the draft is now MORE complete — it includes closing timing, termination
+  rights, and the customary-provisions catch-all the biased rubric had suppressed** (matching
+  what the real filing did). A customer's own style is planned to live in a facts-stripped
+  few-shot layer (#4), NOT in the materiality rules.
+- **Next roadmap levers (no training):** #3 build a data-derived, per-deal-type GENERAL rubric
+  from the 2000+ multi-company corpus (Task B — market-norm bands, replaces the neutral prose
+  guidance with measured ones); #4 tone via facts-stripped few-shot from the customer's own
+  filings (the 17 Richtech ones go here); #5 multi-doc; #6 scoped-AMBER + narrative-claim check;
+  #7 free base-model upgrades.
 
 ## delex fixes + corpus filter shipped — delex fits 2.03/3.02, NOT the 1.01 core (2026-07-16)
 Did the Jetson-side work (no RTX needed): fixed delex quality + built the groundability
