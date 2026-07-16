@@ -122,18 +122,47 @@ _PARTY_TERMS = {
 }
 
 
-def _ensure_exhibit_qualifier(disclosure: str) -> str:
-    """Every real 8-K Item disclosure closes with the standard 'qualified in its
-    entirety by reference to the full text... Exhibit 10.1' sentence. The model
-    usually writes it but occasionally drops it, so guarantee it — it's fixed
-    boilerplate, not a fact, and never needs a source citation."""
-    if "qualified in its entirety" in disclosure.lower():
-        return disclosure
-    # Pick the instrument's defined term, e.g. (the "Note") / (the "Agreement") —
-    # the FIRST defined term is usually a party ("the Company"), so skip party roles.
+# Instrument phrases, most-specific first — used to name the closing qualifier when the
+# disclosure defines no non-party term (e.g. it set (the "Purchaser") but not (the "Agreement")).
+_INSTRUMENT_WORDS = [
+    "Purchase and Sale Agreement", "Securities Purchase Agreement", "Merger Agreement",
+    "Credit Agreement", "Asset Purchase Agreement", "Promissory Note", "Agreement", "Note",
+    "Indenture", "Warrant", "Lease", "Plan", "Amendment", "Guaranty", "Deed",
+]
+
+
+def _instrument_noun(disclosure: str) -> str:
+    """The noun for the closing qualifier — the INSTRUMENT, never a party role. Prefer a
+    non-party defined term (the "Note"); else the most specific instrument phrase present in
+    the text; else 'Agreement'."""
     terms = re.findall(r'\(the [“”"]([A-Z][A-Za-z ]+?)[“”"]\)', disclosure)
-    noun = next((t for t in terms if t.strip().lower() not in _PARTY_TERMS), None) \
-        or (terms[0] if terms else "Agreement")
+    noun = next((t for t in terms if t.strip().lower() not in _PARTY_TERMS), None)
+    if noun:
+        return noun
+    for w in _INSTRUMENT_WORDS:
+        if re.search(rf"\b{re.escape(w)}\b", disclosure):
+            return w
+    return "Agreement"
+
+
+def _ensure_exhibit_qualifier(disclosure: str) -> str:
+    """Every real 8-K Item disclosure closes with the standard 'qualified in its entirety by
+    reference to the full text ... Exhibit 10.1' sentence, referring to the INSTRUMENT. The
+    model usually writes it, but (a) sometimes drops it, and (b) sometimes anchors it to a
+    PARTY role when the agreement has no defined term (e.g. 'description of the Purchaser') —
+    fix both. It's fixed boilerplate, not a fact, so needs no source citation."""
+    noun = _instrument_noun(disclosure)
+    if "qualified in its entirety" in disclosure.lower():
+        # Repair a qualifier the model anchored to a party role instead of the instrument.
+        m = re.search(r"description of the ([A-Za-z ]+?) does not purport", disclosure)
+        if m and m.group(1).strip().lower() in _PARTY_TERMS:
+            wrong = m.group(1)
+            disclosure = disclosure.replace(
+                f"description of the {wrong} does not purport",
+                f"description of the {noun} does not purport")
+            disclosure = re.sub(r"full text of such " + re.escape(wrong) + r"\b",
+                                f"full text of such {noun}", disclosure)
+        return disclosure
     qualifier = (
         f"The foregoing description of the {noun} does not purport to be complete and "
         f"is qualified in its entirety by reference to the full text of such {noun}, a "
