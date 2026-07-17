@@ -9,7 +9,9 @@ Input `reviews` is a list of the dicts returned by summarize.review_contract().
 from __future__ import annotations
 
 import io
+import json
 import re
+from pathlib import Path
 
 import docx
 from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -122,7 +124,11 @@ def to_word(reviews: list[dict]) -> bytes:
 # Our own transparency material (precedents, fact trace) is kept as a clearly
 # separate appendix, never mixed into the filing-shaped section.
 
-REGISTRANT = {
+# Built-in fallback registrant profile. NOT hardcoded into the filing path anymore — the
+# active profile comes from load_registrant() (registrant.json), so a different issuer, a
+# changed address, or new officers are a config edit, not a code change. This default keeps
+# the current deployment working if no registrant.json is present.
+_DEFAULT_REGISTRANT = {
     "name": "Richtech Robotics Inc.",
     "state": "Nevada",
     "file_number": "001-41866",
@@ -135,6 +141,26 @@ REGISTRANT = {
     "signer_name": "Zhenwu (Wayne) Huang",
     "signer_title": "Chief Executive Officer and Director",
 }
+
+
+def load_registrant() -> dict:
+    """The registrant profile used on the cover page + signature block. Loaded from the
+    configured registrant.json (per-deployment), merged over the built-in default so a partial
+    file still works. Makes the tool multi-company and lets the address/officers be updated
+    without touching code. `securities` rows are normalized to tuples for the table renderers."""
+    from .config import CONFIG
+    data = dict(_DEFAULT_REGISTRANT)
+    p = Path(CONFIG.registrant_file)
+    if p.exists():
+        try:
+            data.update(json.loads(p.read_text(encoding="utf-8")))
+        except Exception:
+            pass  # malformed file -> fall back to the default rather than crash a filing
+    data["securities"] = [tuple(s) for s in data.get("securities", [])]
+    return data
+
+
+REGISTRANT = load_registrant()
 
 
 def _report_date(draft: dict) -> str:

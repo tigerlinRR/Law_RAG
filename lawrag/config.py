@@ -33,6 +33,10 @@ class Config:
     # Where original uploaded files are kept (so the Library can serve them back).
     storage_dir: str = os.getenv("STORAGE_DIR", str(_ROOT / "storage"))
 
+    # Registrant profile for 8-K cover page / signature — per-deployment config so the tool
+    # is not hardcoded to one issuer (see export.load_registrant). JSON; falls back to a default.
+    registrant_file: str = os.getenv("REGISTRANT_FILE", str(_ROOT / "registrant.json"))
+
     # Chunking
     chunk_chars: int = _int("CHUNK_CHARS", 1200)
     chunk_overlap: int = _int("CHUNK_OVERLAP", 150)

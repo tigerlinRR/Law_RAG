@@ -376,9 +376,19 @@ the production architecture is settled and the first quality improvement is buil
   correct. **Honest boundary:** self-contained contracts (real-estate PSA) → near-publishable;
   registered securities offerings (ATM) → correct-but-incomplete (offering size, S-3 file no.,
   5.1 opinion / 23.1 consent live OUTSIDE the single agreement → supplements/multi-doc).
-- **Next roadmap levers (no training):** #4 tone via facts-stripped few-shot from the customer's
-  own filings (the 17 Richtech ones go here); #5 multi-doc (contract + prospectus/opinion →
-  offering exhibits); #7 free base-model upgrades.
+- **Registrant profile de-hardcoded (commercialization, 2026-07-17).** The 8-K cover/signature
+  registrant was a hardcoded `export.REGISTRANT` dict (Richtech) — unfit for a multi-company
+  product and the source of the stale-cover-address issue. Now `export.load_registrant()` reads
+  a per-deployment **`registrant.json`** (path via `CONFIG.registrant_file` / `REGISTRANT_FILE`
+  env), merged over a built-in default so nothing breaks if absent. A new customer / a changed
+  address / new officers = a config edit, no code change. `registrant.json` is gitignored (like
+  `.env`); `_DEFAULT_REGISTRANT` remains the fallback. Loaded at import → edit then restart the
+  server. Verified: editing the file changes the rendered address. (Competitor CaseMark takes
+  registrant identifiers as an input too — this matches; see [[casemark-competitor]].)
+- **Next roadmap levers (no training):** auto-detect triggered Items from the upload (CaseMark's
+  "Item Selection Matrix" — replaces manual checkboxes; pairs with the deal-category classifier);
+  #4 tone via facts-stripped few-shot from the customer's own filings; #5 multi-doc (contract +
+  prospectus/opinion → offering exhibits + 5.1/23.1); #7 free base-model upgrades.
 
 ## delex fixes + corpus filter shipped — delex fits 2.03/3.02, NOT the 1.01 core (2026-07-16)
 Did the Jetson-side work (no RTX needed): fixed delex quality + built the groundability
