@@ -399,10 +399,22 @@ the production architecture is settled and the first quality improvement is buil
   draft). SUGGESTION-ONLY (never auto-commits). Conservative prompt explicitly forbids 2.01
   unless the deal has CLOSED — so it AVOIDS CaseMark's error (CaseMark wrongly reported a 2.01
   completion for an unclosed PSA). Verified: PSA→1.01 (not 2.01), ATM→1.01, convertible note→2.03.
-- **Next roadmap levers (no training):** #4 tone via facts-stripped few-shot from the customer's
-  own filings; #5 multi-doc (contract + prospectus/opinion → offering exhibits + 5.1/23.1);
-  deepen extraction to match CaseMark's narrative richness while staying grounded; #7 free
-  base-model upgrades.
+- **Multi-document filing — BACKEND SKELETON built (#5, 2026-07-17).** `draft_filing` now takes
+  ONE OR MORE source docs (single path still works). `_route_items` maps each Item to the doc
+  that triggers it (contract→1.01/2.03/…, press release→8.01); NEWS Items 7.01/8.01 added to
+  `ITEM_TITLES` with a summarize-the-press-release path (`_draft_news`) that furnishes it as
+  Exhibit 99.1 (guardrail + narrative audit still run against that source). `_build_exhibits`
+  merges the 9.01 index (10.1 + 99.1 + 104); result carries `_exhibits`. Contract-only
+  post-processing ((c) statement, 10.1 qualifier) is gated to `CONTRACT_ITEMS`. Verified
+  structurally (contract + press release → 1.01 + 8.01 + merged exhibits, guardrail clean).
+  **Caveats / still TODO:** (a) auto-routing of press-release→8.01 isn't reliable yet (in the
+  test an unrelated press release wasn't tagged 8.01 so it fell back to the contract) — improve
+  detect for news docs OR let the user assign doc→Item in the UI; (b) API/web still single-file
+  — need multi-file upload + render `_exhibits` in export/web; (c) 7.01 furnish nuance / multiple
+  99.x numbering. Backend is the skeleton; delivery plumbing is next.
+- **Next roadmap levers (no training):** finish #5 delivery (multi-file API/web + `_exhibits`
+  rendering + doc→Item assignment); #4 tone via facts-stripped few-shot from the customer's own
+  filings; deepen extraction; #7 free base-model upgrades.
 
 ## delex fixes + corpus filter shipped — delex fits 2.03/3.02, NOT the 1.01 core (2026-07-16)
 Did the Jetson-side work (no RTX needed): fixed delex quality + built the groundability

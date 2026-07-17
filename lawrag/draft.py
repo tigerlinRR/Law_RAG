@@ -34,7 +34,17 @@ ITEM_TITLES = {
     "2.03": "Creation of a Direct Financial Obligation",
     "3.02": "Unregistered Sales of Equity Securities",
     "5.02": "Departure/Election of Directors or Officers",
+    # News/event-driven Items — drafted from a press release / announcement (not a contract),
+    # and the source document is attached as Exhibit 99.1 (not 10.1). See _draft_news.
+    "7.01": "Regulation FD Disclosure",
+    "8.01": "Other Events",
 }
+
+# Items whose source is a press release / announcement, drafted as a neutral event summary
+# with the document furnished as Exhibit 99.1 — a different path from contract-clause items.
+NEWS_ITEMS = {"7.01", "8.01"}
+# Items whose disclosure is a contract-clause description qualified by reference to Exhibit 10.1.
+CONTRACT_ITEMS = {"1.01", "1.02", "2.01", "2.03", "3.02", "5.02"}
 
 # Per-Item extraction checklists — each 8-K Item type discloses different facts,
 # so the due-diligence extraction is pointed at what THAT Item needs (a note
@@ -726,6 +736,38 @@ _ITEM_DETECT_SYSTEM = (
     "triggers 3.02. If unsure, suggest only 1.01. Never invent an Item outside this list.")
 
 
+_NEWS_SCHEMA = {"type": "object",
+                "properties": {"disclosure": {"type": "string", "maxLength": 3000}},
+                "required": ["disclosure"]}
+
+_NEWS_SYSTEM = (
+    "You are a securities lawyer drafting an SEC Form 8-K disclosure from a press release or "
+    "company announcement. Write a BRIEF, neutral disclosure (1-2 short paragraphs) that states "
+    "the event factually, using ONLY facts present in the provided document — do NOT add any "
+    "figure, date, name, or claim that is not in it. No promotional or forward-looking language. "
+    "End with: 'A copy of the {noun} is furnished as Exhibit 99.1 to this Current Report on Form "
+    "8-K and is incorporated herein by reference.' Return just the disclosure text.")
+
+
+def _draft_news(item: str, source_text: str) -> str:
+    """Draft a news/event Item (7.01/8.01) from a press release. The model summarizes the
+    announcement; the numeric guardrail + narrative audit still run against this source, so no
+    figure/claim outside the document survives. The document is furnished as Exhibit 99.1."""
+    noun = "press release"
+    try:
+        out = llm.chat_json(_NEWS_SYSTEM.replace("{noun}", noun),
+                            f"=== SOURCE DOCUMENT ===\n{source_text[:CONFIG.llm_max_ctx_chars]}",
+                            _NEWS_SCHEMA, max_tokens=1500)
+        disc = (out.get("disclosure") or "").strip()
+    except Exception:
+        disc = ""
+    if "exhibit 99.1" not in disc.lower():
+        disc = (disc + "\n\n" if disc else "") + (
+            f"A copy of the {noun} is furnished as Exhibit 99.1 to this Current Report on Form "
+            "8-K and is incorporated herein by reference.")
+    return disc
+
+
 def detect_items(contract_path: str | Path) -> list[dict]:
     """Suggest which 8-K Item(s) the uploaded document triggers, with a one-line reason each.
     SUGGESTION ONLY — the UI pre-checks these but the user confirms/adjusts (a classifier that
@@ -774,7 +816,14 @@ def draft_8k(
     item_title = ITEM_TITLES.get(item, "")
     precedent_citations: list[str] = []
 
-    if mode == "delex":
+    if item in NEWS_ITEMS:
+        # News/event Item (7.01/8.01): summarize the press release; source attached as 99.1.
+        from .parsers import parse as _parse
+        full_text = "\n\n".join(b.text for b in _parse(Path(contract_path)))
+        result = {"disclosure": _draft_news(item, full_text), "facts_used": []}
+        review = {"_full_text": full_text, "parties": [], "clauses": [],
+                  "doc_type": "", "summary": "", "_derived": []}
+    elif mode == "delex":
         # v4: delex the source (regex + spaCy — NO LLM extraction) -> the model emits a
         # placeholder skeleton (cannot write a real value) -> backfill placeholders from
         # the source map. Facts come from the source, structure from v4. Needs ONLY the v4
@@ -798,7 +847,9 @@ def draft_8k(
         if item in ("1.01", "3.02"):  # securities sales: supply the derived share count
             _derive_share_count(review)
 
-    if mode == "assemble":
+    if item in NEWS_ITEMS:
+        pass  # news disclosure already drafted above — no contract checklist / clause draft
+    elif mode == "assemble":
         # A) FACT-LOCKED: assemble from verified facts; the model writes no prose at all.
         disc, facts = _assemble_disclosure(item, review, item_title)
         result = {"disclosure": disc, "facts_used": facts}
@@ -833,7 +884,8 @@ def draft_8k(
         from .export import load_registrant  # lazy: avoid a circular import at module load
         _counterparty = _pick_counterparty(review.get("parties", []), load_registrant().get("name"))
         disc = _ensure_material_relationship(disc, _counterparty)
-    disc = _ensure_exhibit_qualifier(disc)
+    if item in CONTRACT_ITEMS:  # news Items reference Exhibit 99.1, not the 10.1 qualifier
+        disc = _ensure_exhibit_qualifier(disc)
     full_text = review.get("_full_text", "")
     if mode == "hybrid":
         # HYBRID (default): keep the model's prose but HARD-LOCK figures — any number it
@@ -913,17 +965,60 @@ def _filing_order(items: list[str]) -> list[str]:
     return sorted(uniq, key=lambda s: [int(x) for x in s.split(".")])
 
 
-def draft_filing(contract_path: str | Path, items: list[str],
-                 allowed_clients: list[str] | None = None) -> dict:
-    """Draft a multi-Item 8-K from ONE source contract.
+def _route_items(sources: list[Path], items: list[str]) -> dict[str, Path]:
+    """Map each Item to the uploaded document it should be drafted from. One source -> all
+    Items use it. Multiple sources -> detect each doc's Items and route each Item to the doc
+    that triggers it (e.g. Item 1.01 <- the contract, Item 8.01 <- the press release), falling
+    back by family, then to the first source."""
+    if len(sources) == 1:
+        return {it: sources[0] for it in items}
+    detected = {}
+    for s in sources:
+        try:
+            detected[s] = {d["item"] for d in detect_items(s)}
+        except Exception:
+            detected[s] = set()
+    routing: dict[str, Path] = {}
+    for it in items:
+        match = next((s for s in sources if it in detected.get(s, set())), None)
+        if match is None:
+            fam = NEWS_ITEMS if it in NEWS_ITEMS else CONTRACT_ITEMS
+            match = next((s for s in sources if detected.get(s, set()) & fam), sources[0])
+        routing[it] = match
+    return routing
 
-    Substantive Items are drafted from the contract; recognized cross-reference Items
-    (e.g. 3.02 -> 1.01) get the standard 'incorporated by reference' boilerplate — no
-    LLM, no fabrication risk. Returns one result dict whose top-level fields carry the
-    PRIMARY substantive Item (so History / guardrail banner / review pack keep working),
-    plus `_items`: the ordered list of {item, item_title, disclosure, cross_ref} sections
-    that form the filing body. Guardrails from all substantive Items are merged."""
+
+def _build_exhibits(items: list[str]) -> list[dict]:
+    """The Item 9.01 exhibit index for the selected Items: 10.1 for contract Items, 99.1 for a
+    news/press-release Item, and the standard 104 cover-page XBRL. (Registered-offering exhibits
+    like 5.1 opinion / 23.1 consent are supplied by the reviewer when applicable.)"""
+    ex = []
+    if any(i in CONTRACT_ITEMS for i in items):
+        ex.append({"number": "10.1", "description": "Agreement"})  # export refines with type/date
+    if any(i in NEWS_ITEMS for i in items):
+        ex.append({"number": "99.1", "description": "Press release"})
+    ex.append({"number": "104",
+               "description": "Cover Page Interactive Data File (embedded within the Inline "
+                              "XBRL document)"})
+    return ex
+
+
+def draft_filing(sources: "str | Path | list", items: list[str],
+                 allowed_clients: list[str] | None = None) -> dict:
+    """Draft a multi-Item 8-K from ONE OR MORE source documents.
+
+    `sources` is a single path or a list of paths (contract + press release + …). Each Item is
+    routed to the document that triggers it (see _route_items): contract-family Items draft from
+    the agreement via clause extraction; news Items (7.01/8.01) summarize a press release with it
+    furnished as Exhibit 99.1. Recognized cross-reference Items (e.g. 3.02 -> 1.01) get the
+    standard 'incorporated by reference' boilerplate (no LLM). Returns one result whose top-level
+    fields carry the PRIMARY substantive Item, plus `_items` (ordered sections) and `_exhibits`
+    (the merged 9.01 index). Guardrails from all substantive Items are merged."""
+    if isinstance(sources, (str, Path)):
+        sources = [sources]
+    sources = [Path(s) for s in sources]
     items = _filing_order(items) or ["1.01"]
+    routing = _route_items(sources, items)
     sections: list[dict] = []
     substantive: list[tuple[str, dict]] = []
     for it in items:
@@ -933,13 +1028,13 @@ def draft_filing(contract_path: str | Path, items: list[str],
             sections.append({"item": it, "item_title": title,
                              "disclosure": _cross_ref_text(it, comp), "cross_ref": True})
         else:
-            r = draft_8k(contract_path, item=it, allowed_clients=allowed_clients)
+            r = draft_8k(routing.get(it, sources[0]), item=it, allowed_clients=allowed_clients)
             substantive.append((it, r))
             sections.append({"item": it, "item_title": r.get("item_title", title),
                              "disclosure": r.get("disclosure", ""), "cross_ref": False})
     if not substantive:  # degenerate (only cross-ref Items selected): draft the first
         it = items[0]
-        r = draft_8k(contract_path, item=it, allowed_clients=allowed_clients)
+        r = draft_8k(routing.get(it, sources[0]), item=it, allowed_clients=allowed_clients)
         substantive.append((it, r))
         for s in sections:
             if s["item"] == it:
@@ -954,6 +1049,7 @@ def draft_filing(contract_path: str | Path, items: list[str],
         blocked = blocked or g.get("verdict") == "blocked"
     result["_guardrail"] = {"verdict": "blocked" if blocked else "clean", "items": merged}
     result["_items"] = sections
+    result["_exhibits"] = _build_exhibits(items)
     result["item"] = primary_item
     result["item_title"] = ITEM_TITLES.get(primary_item, "")
     return result
