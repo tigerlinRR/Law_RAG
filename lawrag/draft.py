@@ -119,6 +119,9 @@ _PARTY_TERMS = {
     "company", "investor", "holder", "vendor", "client", "purchaser", "seller",
     "borrower", "lender", "buyer", "supplier", "party", "parties", "sec",
     "registrant", "counterparty", "guarantor", "issuer", "lessor", "lessee",
+    "agent", "agents", "designated agent", "sales agent", "placement agent",
+    "underwriter", "underwriters", "manager", "managers", "trustee", "escrow agent",
+    "purchasers", "sellers", "holders", "investors", "lead agent",
 }
 
 
@@ -132,17 +135,17 @@ _INSTRUMENT_WORDS = [
 
 
 def _instrument_noun(disclosure: str) -> str:
-    """The noun for the closing qualifier — the INSTRUMENT, never a party role. Prefer a
-    non-party defined term (the "Note"); else the most specific instrument phrase present in
-    the text; else 'Agreement'."""
-    terms = re.findall(r'\(the [“”"]([A-Z][A-Za-z ]+?)[“”"]\)', disclosure)
-    noun = next((t for t in terms if t.strip().lower() not in _PARTY_TERMS), None)
-    if noun:
-        return noun
+    """The noun for the closing qualifier / (c) statement — the INSTRUMENT, never a party
+    role. Prefer a known instrument phrase actually present in the text (so a party defined
+    term like 'Agents'/'Rodman' can never be mistaken for the instrument, regardless of
+    whether every role word is in _PARTY_TERMS); else a non-party defined term (for an
+    unusual instrument, e.g. (the "Facility")); else 'Agreement'."""
     for w in _INSTRUMENT_WORDS:
         if re.search(rf"\b{re.escape(w)}\b", disclosure):
             return w
-    return "Agreement"
+    terms = re.findall(r'\(the [“”"]([A-Z][A-Za-z ]+?)[“”"]\)', disclosure)
+    noun = next((t for t in terms if t.strip().lower() not in _PARTY_TERMS), None)
+    return noun or "Agreement"
 
 
 def _ensure_exhibit_qualifier(disclosure: str) -> str:
@@ -179,8 +182,11 @@ _ROLE_LABEL_RE = re.compile(
 
 
 def _clean_party(p: str) -> str:
-    """Strip a leading role label (e.g. 'Seller: ', 'Purchaser - ') from a party string."""
-    return _ROLE_LABEL_RE.sub("", (p or "").strip()).strip()
+    """Strip a leading role label (e.g. 'Seller: ', 'Purchaser - ') and any trailing defined-
+    term parenthetical (e.g. ' (the "Rodman")') from a party string."""
+    p = _ROLE_LABEL_RE.sub("", (p or "").strip())
+    p = re.sub(r'\s*\((?:the\s+)?[“”"][^)]*[“”"]\)\s*$', '', p)  # drop trailing (the "X")
+    return p.strip()
 
 
 def _pick_counterparty(parties: list[str], company_name: str | None) -> str | None:
@@ -207,8 +213,7 @@ def _ensure_material_relationship(disclosure: str, counterparty: str | None = No
     if "material relationship" in disclosure.lower():
         return disclosure
     terms = re.findall(r'\(the [“”"]([A-Z][A-Za-z ]+?)[“”"]\)', disclosure)
-    instrument = next((t for t in terms if t.strip().lower() not in _PARTY_TERMS), None) \
-        or (terms[0] if terms else "Agreement")
+    instrument = _instrument_noun(disclosure)  # the INSTRUMENT, never a party role
     if counterparty and counterparty.strip():
         cp = _clean_party(counterparty)  # the extracted other party — reliable, not a guess
     else:
@@ -265,9 +270,14 @@ _SYSTEM = (
     "selectivity, not just their tone. Your draft MUST satisfy every mandatory SEC "
     "requirement in (c).\n\n"
     "RULES:\n"
-    "1. Include only the material terms a reasonable investor needs: the nature of the "
-    "transaction, the parties, the date, and the key commercial/economic terms the "
-    "precedents show are material for this Item type. LEAVE OUT the rest.\n"
+    "1. Include the material terms a reasonable investor needs: the nature of the "
+    "transaction, the parties, the date, and the key commercial/economic terms material "
+    "for this Item type. The extracted facts may include clauses capturing terms SPECIFIC "
+    "to THIS agreement (e.g. an exclusivity / sole-agent arrangement and its duration, an "
+    "unusual fee or commission, a liability cap, a standstill, a right of first refusal, "
+    "an earn-out, a lock-up) — INCLUDE any such term that is material and non-standard; do "
+    "NOT drop a clearly material, unusual term just because it is not a routine field. "
+    "Leave out only genuine boilerplate.\n"
     "2. Do NOT describe standard or protective/boilerplate provisions individually "
     "(e.g. governing law, dispute resolution, confidentiality, indemnification, "
     "limitation of liability, standard IP assignment, representations and warranties, "

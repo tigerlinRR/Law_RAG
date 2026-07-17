@@ -53,7 +53,9 @@ REVIEW_SCHEMA = {
         "parties": {"type": "array", "maxItems": 12,
                     "items": {"type": "string", "maxLength": 150}},
         "clauses": {
-            "type": "array", "maxItems": 30,
+            # room for the fixed checklist PLUS open-ended "other material terms" (the
+            # long-tail mechanism that lets one tool handle any contract type).
+            "type": "array", "maxItems": 45,
             "items": {
                 "type": "object",
                 "properties": {
@@ -101,6 +103,15 @@ def _user_prompt(text: str, checklist: list[str]) -> str:
     return (
         "Review the contract below. Produce one 'clauses' entry for EACH checklist "
         f"item, in this order:\n{checklist_block}\n\n"
+        "THEN, after the checklist entries, add extra 'clauses' entries for ANY OTHER "
+        "term specific to THIS agreement that a reasonable investor would consider "
+        "material but that the checklist above does not cover — e.g. an exclusivity or "
+        "sole-agent arrangement and its duration, a standstill, a right of first refusal, "
+        "an unusual fee or commission, a liability cap, a most-favored-nation clause, an "
+        "earn-out, a lock-up. Give each a short descriptive 'name', a brief 'value', and a "
+        "verbatim 'quote'. Do NOT invent — include a term only if it is actually present in "
+        "this contract. This open list is what lets the tool handle any contract type, not "
+        "just the ones the checklist anticipates.\n\n"
         "Also write a concise plain-language 'summary' (3-5 sentences), list the "
         "'parties', and list 'key_risks'.\n\n"
         f"=== CONTRACT TEXT ===\n{text}"
@@ -194,8 +205,11 @@ def _merge(partials: list[dict], checklist: list[str]) -> dict:
             if name not in by_clause or (found and not
                     (by_clause[name]["value"].strip().lower() not in ("", "not found"))):
                 by_clause[name] = cl
-    merged["clauses"] = [by_clause[c] for c in checklist if c in by_clause] or \
-        list(by_clause.values())
+    # checklist clauses first (in order), THEN any open-ended "other material terms"
+    # (names not in the checklist) so the long-tail extraction survives map-reduce too.
+    ordered = [by_clause[c] for c in checklist if c in by_clause]
+    extras = [cl for name, cl in by_clause.items() if name not in checklist]
+    merged["clauses"] = (ordered + extras) or list(by_clause.values())
     # Summarize the concatenated per-part summaries into one.
     joined = " ".join(p.get("summary", "") for p in partials)
     merged["summary"] = llm.chat(
