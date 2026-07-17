@@ -1004,7 +1004,8 @@ def _build_exhibits(items: list[str]) -> list[dict]:
 
 
 def draft_filing(sources: "str | Path | list", items: list[str],
-                 allowed_clients: list[str] | None = None) -> dict:
+                 allowed_clients: list[str] | None = None,
+                 routing: dict[str, "str | Path"] | None = None) -> dict:
     """Draft a multi-Item 8-K from ONE OR MORE source documents.
 
     `sources` is a single path or a list of paths (contract + press release + …). Each Item is
@@ -1018,7 +1019,12 @@ def draft_filing(sources: "str | Path | list", items: list[str],
         sources = [sources]
     sources = [Path(s) for s in sources]
     items = _filing_order(items) or ["1.01"]
-    routing = _route_items(sources, items)
+    # Explicit routing (item -> source) from the UI (the user confirmed which document covers
+    # which Item) takes precedence; otherwise auto-route by per-document detection.
+    if routing:
+        routing = {it: Path(p) for it, p in routing.items()}
+    else:
+        routing = _route_items(sources, items)
     sections: list[dict] = []
     substantive: list[tuple[str, dict]] = []
     for it in items:

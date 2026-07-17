@@ -436,11 +436,11 @@ async function deleteDoc(d) {
 }
 
 /* ---------------- generate 8-K ---------------- */
-let genItemsLoaded = false;
+let draftItems = [];       // [{item, title}] the tool can draft
+let genInited = false;
+const genCards = [];       // one per uploaded document: {file, card, checks:{item:checkbox}}
 
 async function initGenerate() {
-  // Populate the client dropdown from the user's in-scope clients (same source
-  // as the search filter), and the Item dropdown from the server once.
   try {
     const s = await (await fetch("/api/stats")).json();
     const csel = $("#gen-client");
@@ -448,111 +448,105 @@ async function initGenerate() {
     (s.clients || []).forEach((c) => csel.appendChild(new Option(c, c)));
     if (!csel.options.length) csel.appendChild(new Option("(no clients in library yet)", ""));
   } catch (e) { /* leave as-is */ }
-
-  if (!genItemsLoaded) {
+  if (!genInited) {
     try {
-      const d = await (await fetch("/api/draft-items")).json();
-      const box = $("#gen-items");
-      box.innerHTML = "";
-      (d.items || []).forEach((it) => {
-        const lab = el("label", "item-check");
-        const cb = el("input");
-        cb.type = "checkbox"; cb.value = it.item;
-        if (it.item === "1.01") cb.checked = true;   // sensible default
-        lab.appendChild(cb);
-        lab.appendChild(el("span", null, ` Item ${it.item} — ${it.title}`));
-        box.appendChild(lab);
-      });
-      genItemsLoaded = true;
+      draftItems = (await (await fetch("/api/draft-items")).json()).items || [];
+      genInited = true;
     } catch (e) { /* leave as-is */ }
   }
 }
 
 const gz = $("#genzone"), genInput = $("#genInput");
 gz.addEventListener("click", () => genInput.click());
-genInput.addEventListener("change", () => { if (genInput.files.length) pickGenFile(genInput.files[0]); });
+genInput.addEventListener("change", () => { if (genInput.files.length) addGenFiles(genInput.files); });
 ["dragover", "dragenter"].forEach((ev) =>
   gz.addEventListener(ev, (e) => { e.preventDefault(); gz.classList.add("drag"); }));
 ["dragleave", "drop"].forEach((ev) =>
   gz.addEventListener(ev, (e) => { e.preventDefault(); gz.classList.remove("drag"); }));
-gz.addEventListener("drop", (e) => { if (e.dataTransfer.files.length) pickGenFile(e.dataTransfer.files[0]); });
+gz.addEventListener("drop", (e) => { if (e.dataTransfer.files.length) addGenFiles(e.dataTransfer.files); });
+$("#gen-run").addEventListener("click", generate8k);
 
-// On upload, DON'T draft immediately — first auto-detect which 8-K Items the document
-// triggers, pre-check them (the user confirms/adjusts), then draft on the Generate click.
-// Suggestion-only avoids over-triggering (e.g. reporting a 2.01 completion for an unclosed deal).
-let genFile = null;
-$("#gen-run").addEventListener("click", () => { if (genFile) generate8k(genFile); });
+// Multi-document (choice B): each uploaded file becomes a card whose detected Item(s) are
+// pre-checked; the USER confirms/adjusts which Item(s) that document covers, then Generate.
+async function addGenFiles(fileList) {
+  for (const file of Array.from(fileList)) await addGenFileCard(file);
+  $("#gen-run").hidden = genCards.length === 0;
+}
 
-async function pickGenFile(file) {
-  genFile = file;
-  const status = $("#genStatus"), sug = $("#gen-suggest"), run = $("#gen-run");
-  $("#genReport").innerHTML = "";
-  sug.hidden = true; run.hidden = true;
-  status.className = "status";
-  status.innerHTML = `<span class="spinner"></span>Reading “${file.name}” and detecting applicable 8-K Items…`;
-  const boxes = document.querySelectorAll("#gen-items input");
+async function addGenFileCard(file) {
+  const card = el("div", "gen-file-card");
+  const head = el("div", "gen-file-head");
+  head.appendChild(el("span", "gen-file-name", file.name));
+  const rm = el("button", "btn-ghost", "✕"); rm.type = "button";
+  head.appendChild(rm);
+  card.appendChild(head);
+  const note = el("div", "auto-note", "Detecting applicable Items…");
+  card.appendChild(note);
+  const checksWrap = el("div", "item-checks");
+  const checks = {};
+  draftItems.forEach((it) => {
+    const lab = el("label", "item-check");
+    const cb = el("input", null); cb.type = "checkbox"; cb.value = it.item;
+    checks[it.item] = cb;
+    lab.appendChild(cb);
+    lab.appendChild(el("span", null, ` Item ${it.item} — ${it.title}`));
+    checksWrap.appendChild(lab);
+  });
+  card.appendChild(checksWrap);
+  $("#gen-files").appendChild(card);
+  const entry = { file, card, checks };
+  genCards.push(entry);
+  rm.addEventListener("click", () => {
+    card.remove();
+    const i = genCards.indexOf(entry); if (i >= 0) genCards.splice(i, 1);
+    $("#gen-run").hidden = genCards.length === 0;
+  });
   try {
     const fd = new FormData(); fd.append("file", file);
-    const d = await (await fetch("/api/detect-items", { method: "POST", body: fd })).json();
-    const suggested = (d.suggested || []);
-    const codes = suggested.map((s) => s.item);
-    boxes.forEach((c) => { c.checked = codes.includes(c.value); });
-    if (!codes.length) { const one = [...boxes].find((c) => c.value === "1.01"); if (one) one.checked = true; }
-    sug.innerHTML = "";
-    if (suggested.length) {
-      sug.appendChild(el("div", "gen-suggest-title",
-        "Suggested from the contract — confirm or adjust the checkboxes above:"));
-      const ul = el("ul", "gen-suggest-list");
-      suggested.forEach((s) => {
-        const li = el("li", null);
-        li.appendChild(el("span", "gs-item", `Item ${s.item}`));
-        li.appendChild(el("span", null, " — " + s.reason));
-        ul.appendChild(li);
-      });
-      sug.appendChild(ul);
-    } else {
-      sug.appendChild(el("div", "gen-suggest-title",
-        "Couldn't auto-detect an Item — defaulted to Item 1.01. Adjust above if needed."));
-    }
-    sug.hidden = false;
-    status.className = "status";
-    status.textContent = `Ready: “${file.name}”. Confirm the Items above, then click Generate 8-K.`;
-    run.hidden = false;
+    const sug = ((await (await fetch("/api/detect-items", { method: "POST", body: fd })).json()).suggested) || [];
+    sug.forEach((s) => { if (checks[s.item]) checks[s.item].checked = true; });
+    if (!sug.length && checks["1.01"]) checks["1.01"].checked = true;
+    note.textContent = sug.length
+      ? "Suggested: " + sug.map((s) => `Item ${s.item} — ${s.reason}`).join("; ") + "  (confirm or adjust)"
+      : "No Item auto-detected — defaulted to 1.01. Adjust if needed.";
   } catch (e) {
-    status.className = "status error";
-    status.textContent = "Item detection failed — pick the Items manually and Generate. (" + e.message + ")";
-    run.hidden = false;
+    if (checks["1.01"]) checks["1.01"].checked = true;
+    note.textContent = "Detection failed — pick the Item(s) for this document manually.";
   }
 }
 
-async function generate8k(file) {
+async function generate8k() {
   const status = $("#genStatus"), report = $("#genReport");
   report.innerHTML = "";
-  const items = Array.from(document.querySelectorAll("#gen-items input:checked"))
-    .map((c) => c.value);
-  const client = $("#gen-client").value;
-  if (!items.length) {
+  if (!genCards.length) {
+    status.className = "status error"; status.textContent = "Upload at least one document."; return;
+  }
+  const assignments = genCards.map((c) => ({
+    filename: c.file.name,
+    items: Object.entries(c.checks).filter(([, cb]) => cb.checked).map(([it]) => it),
+  }));
+  const allItems = [...new Set(assignments.flatMap((a) => a.items))];
+  if (!allItems.length) {
     status.className = "status error";
-    status.textContent = "Select at least one 8-K Item to draft.";
+    status.textContent = "Check at least one 8-K Item on a document.";
     return;
   }
   status.className = "status";
   status.innerHTML =
-    `<span class="spinner"></span>Drafting Item(s) ${items.join(", ")} from ` +
-    `${escapeHtml(file.name)} — extracting facts, drafting… (~1 min per substantive Item)`;
+    `<span class="spinner"></span>Drafting Item(s) ${allItems.join(", ")} from ` +
+    `${genCards.length} document(s) — extracting facts, drafting… (~1 min per substantive Item)`;
 
   const fd = new FormData();
-  fd.append("file", file);
-  fd.append("items", items.join(","));
-  fd.append("client", client);
+  genCards.forEach((c) => fd.append("files", c.file));
+  fd.append("assignments", JSON.stringify(assignments));
+  fd.append("client", $("#gen-client").value);
   try {
     const res = await fetch("/api/generate/8k", { method: "POST", body: fd });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || "generation failed");
     status.textContent = "";
-    const note = el("p", "auto-note",
-      "Saved to History — you can reopen or download it from the History tab any time.");
-    report.appendChild(note);
+    report.appendChild(el("p", "auto-note",
+      "Saved to History — you can reopen or download it from the History tab any time."));
     renderDraftInto(data.result, report, { id: data.id });
   } catch (err) {
     status.className = "status err";
@@ -761,10 +755,21 @@ function renderDraftInto(r, report, meta) {
   itemSection("9.01", "Financial Statements and Exhibits.", (sec) => {
     sec.appendChild(el("p", "item-para", "(d) Exhibits"));
     const date = filingDateFromDisclosure(r.disclosure);
-    const rows = [
-      ["10.1", `${r._doc_type || "Agreement"}${date ? ", dated " + date : ""}`],
-      ["104", "Cover Page Interactive Data File (embedded within the Inline XBRL documents)"],
-    ];
+    // Use the merged exhibit list from a multi-document filing when present; else the
+    // single-contract default (10.1 + 104).
+    let rows;
+    if (r._exhibits && r._exhibits.length) {
+      rows = r._exhibits.map((e) => {
+        let d = e.description;
+        if (e.number === "10.1") d = `${r._doc_type || "Agreement"}${date ? ", dated " + date : ""}`;
+        return [e.number, d];
+      });
+    } else {
+      rows = [
+        ["10.1", `${r._doc_type || "Agreement"}${date ? ", dated " + date : ""}`],
+        ["104", "Cover Page Interactive Data File (embedded within the Inline XBRL documents)"],
+      ];
+    }
     const table = el("table", "clauses exhibit-table");
     table.innerHTML = "<thead><tr><th>Exhibit</th><th>Description</th></tr></thead>";
     const tb = el("tbody");

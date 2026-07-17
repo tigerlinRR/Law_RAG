@@ -412,9 +412,23 @@ the production architecture is settled and the first quality improvement is buil
   detect for news docs OR let the user assign doc→Item in the UI; (b) API/web still single-file
   — need multi-file upload + render `_exhibits` in export/web; (c) 7.01 furnish nuance / multiple
   99.x numbering. Backend is the skeleton; delivery plumbing is next.
-- **Next roadmap levers (no training):** finish #5 delivery (multi-file API/web + `_exhibits`
-  rendering + doc→Item assignment); #4 tone via facts-stripped few-shot from the customer's own
-  filings; deepen extraction; #7 free base-model upgrades.
+- **Multi-document DELIVERY shipped (#5, 2026-07-17).** End-to-end usable now:
+  - `POST /api/generate/8k` takes **multiple `files`** + an `assignments` JSON
+    (`[{filename, items:[…]}]`) — the user's confirmed doc→Item mapping; `draft_filing` accepts
+    an explicit `routing` (UI wins over auto-detect). Legacy single-file still works.
+  - Web Generate tab (**choice B**): drop one or more docs → each becomes a **card** whose
+    detected Item(s) are pre-checked, the user confirms/adjusts which Item(s) that doc covers →
+    Generate. Per-file cards replace the old global checkboxes.
+  - `_exhibits` (10.1 + 99.1 + 104) rendered in the web view AND both exporters (`_exhibit_rows`
+    in export.py; Word table row-count now dynamic; HTML table row list dynamic).
+  - **`.txt` now a supported input** (`parsers.parse_text`) — press releases are often plain text.
+  - Verified E2E over HTTP: contract(pdf, 1.01) + press release(txt, 8.01) → filing with both
+    Items, **8.01 drafted from the press release** (correct routing via user assignment), exhibits
+    10.1+99.1+104, guardrail CLEAN, 8.01 furnishes Exhibit 99.1. Each Item still runs the numeric
+    guardrail + #6 narrative audit against ITS source.
+- **Next roadmap levers (no training):** #4 tone via facts-stripped few-shot from the customer's
+  own filings; deepen extraction to match CaseMark richness while grounded; offering-specific
+  exhibits (5.1/23.1) as reviewer supplements; #7 free base-model upgrades.
 
 ## delex fixes + corpus filter shipped — delex fits 2.03/3.02, NOT the 1.01 core (2026-07-16)
 Did the Jetson-side work (no RTX needed): fixed delex quality + built the groundability

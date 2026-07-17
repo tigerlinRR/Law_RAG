@@ -175,6 +175,21 @@ def save_registrant(data: dict) -> dict:
 REGISTRANT = load_registrant()
 
 
+def _exhibit_rows(draft: dict) -> list[tuple[str, str]]:
+    """The Item 9.01 exhibit rows (number, description). Uses the merged `_exhibits` list from a
+    multi-document filing when present (e.g. 10.1 agreement + 99.1 press release + 104); else the
+    single-contract default. The 10.1 description is filled with the doc type + event date."""
+    date = _report_date(draft)
+    contract_desc = f"{draft.get('_doc_type') or 'Agreement'}, dated {date}"
+    exs = draft.get("_exhibits")
+    if exs:
+        return [(e.get("number", ""),
+                 contract_desc if e.get("number") == "10.1" else e.get("description", ""))
+                for e in exs]
+    return [("10.1", contract_desc),
+            ("104", "Cover Page Interactive Data File (embedded within the Inline XBRL document)")]
+
+
 def _report_date(draft: dict) -> str:
     """The 8-K 'date of earliest event reported' — the transaction date, which
     is almost always the first date stated in the disclosure ('On <date>, ...
@@ -386,17 +401,17 @@ def draft_to_word(draft: dict) -> bytes:
     ital = doc.add_paragraph()
     ital.add_run("(d) Exhibits").italic = True
     doc.add_paragraph("The following exhibits are being filed herewith:")
-    # Exhibit index: underlined header, no grid.
-    t3 = doc.add_table(rows=3, cols=2)
+    # Exhibit index: underlined header, no grid. Rows from the (possibly multi-doc) exhibit list.
+    ex_rows = _exhibit_rows(draft)
+    t3 = doc.add_table(rows=1 + len(ex_rows), cols=2)
     _no_table_borders(t3)
     for i, h in enumerate(["Exhibit No.", "Description"]):
         cell = t3.rows[0].cells[i]
         cell.paragraphs[0].add_run(h).bold = True
         _cell_borders(cell, bottom=True)
-    t3.rows[1].cells[0].text = "10.1"
-    t3.rows[1].cells[1].text = f"{draft.get('_doc_type') or 'Agreement'}, dated {date}"
-    t3.rows[2].cells[0].text = "104"
-    t3.rows[2].cells[1].text = "Cover Page Interactive Data File (embedded within the Inline XBRL document)"
+    for ri, (num, desc) in enumerate(ex_rows, start=1):
+        t3.rows[ri].cells[0].text = num
+        t3.rows[ri].cells[1].text = desc
     _rule_para(doc, before=10, after=2)
     centered("1")
 
@@ -635,6 +650,9 @@ def _draft_html(draft: dict) -> str:
         for cls, sym, exch in r["securities"]
     )
     egc = "&#9746;" if r["emerging_growth_company"] else "&#9744;"  # ☒ / ☐
+    ex_rows_html = "".join(
+        f"<tr><td class='exno'>{esc(n)}</td><td>{esc(d)}</td></tr>"
+        for n, d in _exhibit_rows(draft))
 
     return f"""<!doctype html><html><head><meta charset="utf-8"><style>
       body {{ font-family: 'Times New Roman', Georgia, serif; color: #000;
@@ -735,8 +753,7 @@ def _draft_html(draft: dict) -> str:
         <table class="exhibit-idx">
           <thead><tr><th>Exhibit No.</th><th>Description</th></tr></thead>
           <tbody>
-            <tr><td class="exno">10.1</td><td>{esc(draft.get('_doc_type') or 'Agreement')}, dated {esc(date)}</td></tr>
-            <tr><td class="exno">104</td><td>Cover Page Interactive Data File (embedded within the Inline XBRL document)</td></tr>
+            {ex_rows_html}
           </tbody>
         </table>
         <hr class="pgrule bottom">

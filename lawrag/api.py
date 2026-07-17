@@ -8,6 +8,7 @@ Serves the static frontend (web/) and exposes:
 from __future__ import annotations
 
 import io
+import json
 import mimetypes
 import os
 import re
@@ -211,35 +212,65 @@ async def api_detect_items(file: UploadFile = File(...), user: dict = Depends(cu
 
 
 @app.post("/api/generate/8k", response_model=None)
-async def api_generate_8k(file: UploadFile = File(...), item: str = Form("1.01"),
-                          items: str = Form(""), client: str = Form(""),
+async def api_generate_8k(files: list[UploadFile] = File(...),
+                          item: str = Form("1.01"), items: str = Form(""),
+                          client: str = Form(""), assignments: str = Form(""),
                           user: dict = Depends(current_user)):
-    """Draft a (possibly multi-Item) 8-K from an uploaded contract and save to History.
+    """Draft a (possibly multi-Item, multi-document) 8-K and save to History.
 
-    `items` = comma-separated Item numbers (e.g. "1.01,3.02"); falls back to `item`.
-    Substantive Items draft from the contract; cross-reference Items (3.02->1.01) are
-    boilerplate. Records are scoped to the caller's permitted clients."""
+    `assignments` (JSON): [{"filename": "...", "items": ["8.01"]}, ...] — the user's confirmed
+    mapping of each uploaded document to the Item(s) it covers (a contract -> 1.01, a press
+    release -> 8.01). If absent, falls back to the legacy single-doc behavior (`items`/`item`
+    on the one file). Records are scoped to the caller's permitted clients."""
     allowed = user["allowed_clients"]  # None = admin/unrestricted
     canonical = clients.resolve(client) if client.strip() else None
-    # A scoped user may only tag (and later see) a generation for a client they can access.
     if allowed is not None and (canonical is None or canonical not in allowed):
         raise HTTPException(status_code=403, detail="client not in your permitted scope")
-    sel = [i.strip() for i in items.split(",") if i.strip()] or [item]
-    bad = [i for i in sel if i not in ITEM_TITLES]
-    if bad:
-        raise HTTPException(status_code=400, detail=f"unsupported item(s): {', '.join(bad)}")
-
-    auth.log(user["username"], "generate_8k", f"items {','.join(sel)}: {file.filename or ''}")
-    tmpdir = Path(tempfile.mkdtemp(prefix="lawrag_gen_"))
-    dest = tmpdir / (file.filename or "upload")
+    if not files:
+        raise HTTPException(status_code=400, detail="upload at least one document")
     try:
-        with open(dest, "wb") as f:
-            shutil.copyfileobj(file.file, f)
-        r = draft_filing(dest, sel, allowed_clients=allowed)
-        gen_id = generations.save("8k_draft", r, source_name=file.filename,
+        assign = json.loads(assignments) if assignments.strip() else []
+    except json.JSONDecodeError:
+        assign = []
+
+    tmpdir = Path(tempfile.mkdtemp(prefix="lawrag_gen_"))
+    try:
+        saved: list[tuple[str, Path]] = []
+        for uf in files:
+            dest = tmpdir / (uf.filename or f"upload_{len(saved)}")
+            with open(dest, "wb") as f:
+                shutil.copyfileobj(uf.file, f)
+            saved.append((uf.filename or dest.name, dest))
+        by_name = {name: path for name, path in saved}
+
+        routing: dict[str, Path] = {}
+        sel: list[str] = []
+        for a in assign:
+            p = by_name.get(a.get("filename"))
+            if not p:
+                continue
+            for it in a.get("items", []):
+                if it in ITEM_TITLES:
+                    routing[it] = p
+                    if it not in sel:
+                        sel.append(it)
+        if not sel:  # legacy / single-doc: global items on the first file, auto-route
+            sel = [i.strip() for i in items.split(",") if i.strip()] or [item]
+            routing = {}
+        bad = [i for i in sel if i not in ITEM_TITLES]
+        if bad:
+            raise HTTPException(status_code=400, detail=f"unsupported item(s): {', '.join(bad)}")
+
+        auth.log(user["username"], "generate_8k",
+                 f"items {','.join(sel)}: {', '.join(by_name)}")
+        r = draft_filing([p for _, p in saved], sel, allowed_clients=allowed,
+                         routing={it: str(p) for it, p in routing.items()} or None)
+        gen_id = generations.save("8k_draft", r, source_name=saved[0][0],
                                   client=canonical, item=r.get("item", sel[0]),
                                   created_by=user["username"])
         return {"id": gen_id, "result": r}
+    except HTTPException:
+        raise
     except NeedsOCR:
         return JSONResponse({"error": "scanned",
                              "detail": "This looks like a scanned PDF; OCR is not "

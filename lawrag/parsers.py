@@ -53,7 +53,12 @@ def parse_docx(path: Path) -> list[Block]:
     return [Block(page=None, text="\n".join(parts))]
 
 
-SUPPORTED = {".pdf", ".docx"}
+def parse_text(path: Path) -> list[Block]:
+    """Plain-text input (e.g. a press release pasted/saved as .txt)."""
+    return [Block(page=None, text=path.read_text(encoding="utf-8", errors="replace"))]
+
+
+SUPPORTED = {".pdf", ".docx", ".txt"}
 
 
 def parse(path: Path) -> list[Block]:
@@ -62,4 +67,6 @@ def parse(path: Path) -> list[Block]:
         return parse_pdf(path)
     if ext == ".docx":
         return parse_docx(path)
+    if ext in (".txt", ".text"):
+        return parse_text(path)
     raise ValueError(f"Unsupported file type: {ext} ({path.name})")
