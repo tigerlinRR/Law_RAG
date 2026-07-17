@@ -50,6 +50,7 @@
     <button class="tab" data-view="generate" role="tab">Generate 8-K</button>
     <button class="tab" data-view="history" role="tab">History</button>
     <button class="tab admin-only" data-view="users" role="tab" hidden>Users</button>
+    <button class="tab admin-only" data-view="company" role="tab" hidden>Company</button>
   </nav>
 
   <main class="container">
@@ -166,6 +167,36 @@
       </div>
       <div id="usersStatus" class="status"></div>
       <div id="usersList"></div>
+    </section>
+
+    <!-- ===================== COMPANY / REGISTRANT (admin) ===================== -->
+    <section id="view-company" class="view">
+      <div class="panel">
+        <h3>Registrant / Company profile</h3>
+        <p class="auto-note">Used on every 8-K cover page and signature block. Edits apply to
+          new drafts immediately — no restart. Get these exactly right (name, Commission File
+          No., EIN); a wrong value lands on every filing.</p>
+        <div class="reg-form">
+          <label>Company legal name<input id="rg-name" autocomplete="off"></label>
+          <label>State of incorporation<input id="rg-state" autocomplete="off"></label>
+          <label>Commission File Number<input id="rg-file" autocomplete="off"></label>
+          <label>IRS Employer ID (EIN)<input id="rg-ein" autocomplete="off"></label>
+          <label>Address line 1<input id="rg-addr1" autocomplete="off"></label>
+          <label>Address line 2<input id="rg-addr2" autocomplete="off"></label>
+          <label>Phone<input id="rg-phone" autocomplete="off"></label>
+          <label>Signer name<input id="rg-signer" autocomplete="off"></label>
+          <label>Signer title<input id="rg-title" autocomplete="off"></label>
+          <label class="reg-check"><input type="checkbox" id="rg-egc"> Emerging growth company</label>
+        </div>
+        <h4>Securities registered</h4>
+        <p class="auto-note">One row per class — title, trading symbol, exchange.</p>
+        <div id="rg-securities"></div>
+        <button id="rg-addsec" class="btn-ghost" type="button">+ Add security</button>
+        <div class="bc-actions">
+          <button id="rg-save" class="btn-primary" type="button">Save company profile</button>
+          <span id="rg-status" class="auto-note"></span>
+        </div>
+      </div>
     </section>
   </main>
 

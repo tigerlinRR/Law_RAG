@@ -591,6 +591,34 @@ def api_delete_user(username: str, user: dict = Depends(require_admin)) -> dict:
     return {"ok": True}
 
 
+# ---------- registrant profile (admin only) ----------
+class RegistrantProfile(BaseModel):
+    name: str | None = None
+    state: str | None = None
+    file_number: str | None = None
+    irs_ein: str | None = None
+    address: list[str] | None = None
+    phone: str | None = None
+    securities: list[list[str]] | None = None
+    emerging_growth_company: bool | None = None
+    signer_name: str | None = None
+    signer_title: str | None = None
+
+
+@app.get("/api/registrant")
+def api_get_registrant(user: dict = Depends(require_admin)) -> dict:
+    """The issuer profile used on the 8-K cover/signature — editable in-browser so a new
+    company / a changed address / new officers needs no file edit or restart."""
+    return {"registrant": export.load_registrant()}
+
+
+@app.put("/api/registrant")
+def api_put_registrant(req: RegistrantProfile, user: dict = Depends(require_admin)) -> dict:
+    updated = export.save_registrant(req.model_dump(exclude_none=True))
+    auth.log(user["username"], "update_registrant", updated.get("name", ""))
+    return {"registrant": updated}
+
+
 @app.get("/")
 def index() -> Response:
     # Inject a cache-busting version (based on each asset's mtime) onto the CSS/JS

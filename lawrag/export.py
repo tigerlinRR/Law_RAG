@@ -160,6 +160,18 @@ def load_registrant() -> dict:
     return data
 
 
+def save_registrant(data: dict) -> dict:
+    """Persist the registrant profile to registrant.json (admin web form). Merged over the
+    built-in default and re-normalized; subsequent renders call load_registrant() so the edit
+    applies with NO server restart. Returns the reloaded profile."""
+    from .config import CONFIG
+    merged = {**_DEFAULT_REGISTRANT, **{k: v for k, v in data.items() if v is not None}}
+    merged["securities"] = [list(s) for s in merged.get("securities", [])]
+    Path(CONFIG.registrant_file).write_text(
+        json.dumps(merged, ensure_ascii=False, indent=2), encoding="utf-8")
+    return load_registrant()
+
+
 REGISTRANT = load_registrant()
 
 
@@ -249,7 +261,7 @@ def _body_para(doc, text: str, *, justify=True, indent=True, bold_terms=True):
 
 def draft_to_word(draft: dict) -> bytes:
     from docx.shared import Inches, Pt
-    r = REGISTRANT
+    r = load_registrant()  # read at render time so an admin edit applies without a restart
     date = _report_date(draft)
     doc = docx.Document()
 
@@ -599,7 +611,7 @@ def _draft_html(draft: dict) -> str:
     """The clean filing document — cover page, Item disclosure, Item 9.01, and
     signature. NO review/QC material (that lives in _review_html)."""
     esc = _esc
-    r = REGISTRANT
+    r = load_registrant()  # read at render time so an admin edit applies without a restart
     date = _report_date(draft)
 
     fls = draft.get("_forward_looking_statements")

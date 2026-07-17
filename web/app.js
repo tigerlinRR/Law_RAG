@@ -17,6 +17,7 @@ document.querySelectorAll(".tab").forEach((tab) => {
     $("#view-" + tab.dataset.view).classList.add("active");
     if (tab.dataset.view === "library") loadLibrary();
     if (tab.dataset.view === "users") loadUsers();
+    if (tab.dataset.view === "company") loadRegistrant();
     if (tab.dataset.view === "history") loadHistory();
     if (tab.dataset.view === "generate") initGenerate();
   });
@@ -1048,6 +1049,74 @@ function escapeHtml(s) {
 }
 
 /* ---------------- auth ---------------- */
+// ---------- Company / registrant profile (admin) ----------
+async function loadRegistrant() {
+  const res = await fetch("/api/registrant");
+  if (!res.ok) return;
+  const r = (await res.json()).registrant || {};
+  $("#rg-name").value = r.name || "";
+  $("#rg-state").value = r.state || "";
+  $("#rg-file").value = r.file_number || "";
+  $("#rg-ein").value = r.irs_ein || "";
+  const addr = r.address || [];
+  $("#rg-addr1").value = addr[0] || "";
+  $("#rg-addr2").value = addr[1] || "";
+  $("#rg-phone").value = r.phone || "";
+  $("#rg-signer").value = r.signer_name || "";
+  $("#rg-title").value = r.signer_title || "";
+  $("#rg-egc").checked = !!r.emerging_growth_company;
+  const box = $("#rg-securities");
+  box.innerHTML = "";
+  const secs = r.securities && r.securities.length ? r.securities : [["", "", ""]];
+  secs.forEach((s) => addSecurityRow(s));
+}
+
+function addSecurityRow(s) {
+  s = s || ["", "", ""];
+  const row = el("div", "sec-row");
+  const mk = (ph, v) => { const i = el("input", null); i.placeholder = ph; i.value = v || ""; return i; };
+  row.appendChild(mk("Title of class", s[0]));
+  row.appendChild(mk("Symbol", s[1]));
+  row.appendChild(mk("Exchange", s[2]));
+  const rm = el("button", "btn-ghost", "✕");
+  rm.type = "button";
+  rm.addEventListener("click", () => row.remove());
+  row.appendChild(rm);
+  $("#rg-securities").appendChild(row);
+}
+
+$("#rg-addsec").addEventListener("click", () => addSecurityRow());
+
+$("#rg-save").addEventListener("click", async () => {
+  const secs = [...document.querySelectorAll("#rg-securities .sec-row")].map((row) => {
+    const [t, sym, ex] = row.querySelectorAll("input");
+    return [t.value.trim(), sym.value.trim(), ex.value.trim()];
+  }).filter((s) => s[0] || s[1] || s[2]);
+  const body = {
+    name: $("#rg-name").value.trim(),
+    state: $("#rg-state").value.trim(),
+    file_number: $("#rg-file").value.trim(),
+    irs_ein: $("#rg-ein").value.trim(),
+    address: [$("#rg-addr1").value.trim(), $("#rg-addr2").value.trim()].filter(Boolean),
+    phone: $("#rg-phone").value.trim(),
+    securities: secs,
+    emerging_growth_company: $("#rg-egc").checked,
+    signer_name: $("#rg-signer").value.trim(),
+    signer_title: $("#rg-title").value.trim(),
+  };
+  const status = $("#rg-status");
+  status.textContent = "Saving…";
+  try {
+    const res = await fetch("/api/registrant", {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(((await res.json()) || {}).detail || "failed");
+    status.textContent = "Saved — applies to new drafts immediately (no restart).";
+    loadRegistrant();
+  } catch (e) { status.textContent = "Failed: " + e.message; }
+});
+
 function showLogin() { $("#login").hidden = false; }
 
 function onAuthed(u) {

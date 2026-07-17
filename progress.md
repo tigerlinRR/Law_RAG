@@ -385,6 +385,13 @@ the production architecture is settled and the first quality improvement is buil
   `.env`); `_DEFAULT_REGISTRANT` remains the fallback. Loaded at import → edit then restart the
   server. Verified: editing the file changes the rendered address. (Competitor CaseMark takes
   registrant identifiers as an input too — this matches; see [[casemark-competitor]].)
+- **Registrant now editable IN-BROWSER (admin, 2026-07-17).** New **Company** admin tab
+  (`view-company`) + `GET/PUT /api/registrant` (require_admin) edit the profile via a form
+  (name/state/File No./EIN/address/phone/securities rows/EGC/signer) → writes `registrant.json`
+  via `export.save_registrant`. Exports now call `load_registrant()` at RENDER time (not the
+  cached module `REGISTRANT`), so an edit applies to new drafts with **no restart**. Verified
+  E2E over HTTP: admin GET/PUT 200 + persisted; non-admin 403. This is CaseMark's
+  "registrant as input" done as a first-class admin screen.
 - **Next roadmap levers (no training):** auto-detect triggered Items from the upload (CaseMark's
   "Item Selection Matrix" — replaces manual checkboxes; pairs with the deal-category classifier);
   #4 tone via facts-stripped few-shot from the customer's own filings; #5 multi-doc (contract +

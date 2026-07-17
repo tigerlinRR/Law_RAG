@@ -776,8 +776,8 @@ def draft_8k(
     result["item_title"] = item_title
     disc = result.get("disclosure", "")
     if item == "1.01":
-        from .export import REGISTRANT as _REG  # lazy: avoid a circular import at module load
-        _counterparty = _pick_counterparty(review.get("parties", []), _REG.get("name"))
+        from .export import load_registrant  # lazy: avoid a circular import at module load
+        _counterparty = _pick_counterparty(review.get("parties", []), load_registrant().get("name"))
         disc = _ensure_material_relationship(disc, _counterparty)
     disc = _ensure_exhibit_qualifier(disc)
     full_text = review.get("_full_text", "")
