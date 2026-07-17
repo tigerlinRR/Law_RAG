@@ -638,6 +638,65 @@ def _compliance_flags(item: str, disclosure: str) -> list[dict]:
     return [{"requirement": name, "satisfied": ok} for name, ok in checks]
 
 
+# Roadmap #6 — narrative-claim verification. The numeric guardrail locks fabricated FIGURES,
+# but a model can still invent a non-numeric claim (or a spelled-out number like "ten business
+# days") — e.g. a termination-notice period the contract doesn't contain. This LLM audit pass
+# flags substantive claims the source doesn't support. REVIEW-ONLY: it never blocks and never
+# alters the draft — a purely additive safety net, so it is always safe to run.
+_NARRATIVE_SKIP = re.compile(
+    r"qualified in its entirety|does not purport to be complete|material relationship between|"
+    r"forward-looking statements|incorporated herein by reference|Exhibit 10\.1", re.I)
+
+_NARRATIVE_SCHEMA = {
+    "type": "object",
+    "properties": {"unsupported": {
+        "type": "array", "maxItems": 20,
+        "items": {"type": "object", "properties": {
+            "index": {"type": "integer"},
+            "issue": {"type": "string", "maxLength": 300},
+        }, "required": ["index", "issue"]}}},
+    "required": ["unsupported"]}
+
+_NARRATIVE_SYSTEM = (
+    "You audit a draft SEC Form 8-K disclosure for FABRICATION. You are given numbered claims "
+    "from the draft, plus the GROUNDED FACTS (terms extracted verbatim from the source "
+    "contract) — those facts are the ONLY supported source of truth. For each claim, decide "
+    "whether the grounded facts support it. Flag a claim as unsupported ONLY if it asserts a "
+    "specific factual term — a number, date, party, right, obligation, amount, duration, fee, "
+    "or condition — that the grounded facts do NOT contain, i.e. it appears invented. DO NOT "
+    "flag: general framing (e.g. 'the Company entered into an agreement'), standard 8-K "
+    "boilerplate, or a reasonable paraphrase of a fact that IS present. Be conservative — if a "
+    "claim is plausibly supported by the facts, treat it as supported. For each unsupported "
+    "claim return its NUMBER in 'index' and the specific unsupported part in 'issue'.")
+
+
+def _narrative_flags(disclosure: str, evidence: str) -> list[dict]:
+    """Flag substantive claims in `disclosure` not supported by `evidence` (the extracted,
+    quote-verified grounded facts + any reviewer supplements/business context). Checking
+    against the compact grounded facts — NOT the raw contract — avoids long-document
+    windowing false-positives and matches what the draft was actually built from. Review-only
+    (never blocks). Boilerplate / (c) statement / FLS legend / exhibit qualifier are skipped."""
+    if not evidence.strip() or not disclosure.strip():
+        return []
+    sents = [s.strip() for s in re.split(r"(?<=[.;])\s+", disclosure) if len(s.strip()) > 25]
+    claims = [s for s in sents if not _NARRATIVE_SKIP.search(s)]
+    if not claims:
+        return []
+    numbered = "\n".join(f"{i + 1}. {c}" for i, c in enumerate(claims))
+    user = (f"=== DRAFT CLAIMS ===\n{numbered}\n\n"
+            f"=== GROUNDED FACTS (the only supported source) ===\n{evidence[:CONFIG.llm_max_ctx_chars]}")
+    try:
+        out = llm.chat_json(_NARRATIVE_SYSTEM, user, _NARRATIVE_SCHEMA, max_tokens=1500)
+    except Exception:
+        return []
+    flags = []
+    for f in out.get("unsupported", []):
+        idx = f.get("index")
+        if isinstance(idx, int) and 1 <= idx <= len(claims):
+            flags.append({"claim": claims[idx - 1], "issue": f.get("issue", "")})
+    return flags
+
+
 def draft_8k(
     contract_path: str | Path,
     item: str = "1.01",
@@ -743,6 +802,11 @@ def draft_8k(
              "status": "fabricated", "source_snippet": None})
     if result.get("_backfill_missing"):
         result["_guardrail"]["verdict"] = "blocked"
+    # #6 narrative-claim audit (model-authored prose only; assemble is deterministic).
+    # Check against the extracted grounded facts (compact, complete) not the raw contract.
+    if mode in ("hybrid", "llm"):
+        result["_grounded_facts"] = _facts_block(review)
+        result["_narrative_flags"] = _narrative_flags(result["disclosure"], result["_grounded_facts"])
     # Keep the source text + anchored derivations so an edited draft can be re-verified
     # in-app (POST /reverify) without re-parsing the contract.
     result["_source_text"] = full_text

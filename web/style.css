@@ -343,3 +343,9 @@ table.clauses td.quote .bc-flag { color: var(--accent-dk); font-style: normal; f
 .gap-input { flex: 0 1 220px; padding: 7px 9px; border: 1px solid var(--border, #ccc);
   border-radius: 6px; font-size: 14px; }
 .gap-input:focus { outline: none; border-color: #c77; box-shadow: 0 0 0 2px #f0d0c0; }
+
+/* Narrative-claim audit (#6) list inside the review banner */
+.nf-list { margin: 6px 0 0; padding-left: 18px; }
+.nf-list li { margin: 4px 0; font-size: 13px; line-height: 1.45; }
+.nf-claim { font-style: italic; }
+.nf-issue { color: #8a4b1a; font-weight: 600; }

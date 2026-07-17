@@ -631,6 +631,25 @@ function renderDraftInto(r, report, meta) {
     report.appendChild(el("div", "guardrail-banner " + cls, msg));
   }
 
+  // Narrative-claim audit (#6): substantive statements the contract may not support.
+  // Review-only — numbers are already locked by the guardrail; this catches invented
+  // non-numeric claims (e.g. a termination-notice period not in the contract).
+  if (r._narrative_flags && r._narrative_flags.length) {
+    const nf = el("div", "guardrail-banner gr-review");
+    nf.appendChild(el("div", null,
+      `⚠ ${r._narrative_flags.length} statement(s) may not be supported by the contract — ` +
+      `verify or edit below (narrative claims are flagged, not auto-blocked):`));
+    const ul = el("ul", "nf-list");
+    r._narrative_flags.forEach((f) => {
+      const li = el("li", null);
+      li.appendChild(el("span", "nf-claim", "“" + f.claim + "”"));
+      if (f.issue) li.appendChild(el("span", "nf-issue", " — " + f.issue));
+      ul.appendChild(li);
+    });
+    nf.appendChild(ul);
+    report.appendChild(nf);
+  }
+
   if (meta && meta.id != null) {
     const mk = (label, path) => {
       const a = el("a", "btn-ghost", label);

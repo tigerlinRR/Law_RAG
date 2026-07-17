@@ -26,7 +26,7 @@ from decimal import Decimal
 from . import auth, clients, db, export, generations, guardrail
 from .config import ROOT
 from .draft import (ITEM_TITLES, _FIGURE_PLACEHOLDER, _FORWARD_LOOKING_STATEMENTS,
-                    _compliance_flags, _needs_forward_looking_statements,
+                    _compliance_flags, _narrative_flags, _needs_forward_looking_statements,
                     add_business_context, draft_8k, draft_filing)
 from .ingest import DocMeta, ingest_file
 from .parsers import NeedsOCR
@@ -271,6 +271,16 @@ def _recompute_verification(result: dict) -> None:
     body = "\n\n".join(s.get("disclosure", "") for s in sections if not s.get("cross_ref"))
     target = body or result.get("disclosure", "")
     result["_guardrail"] = guardrail.reconcile(target, src, derived=derived)
+    # Re-run the #6 narrative-claim audit (review-only) against the GROUNDED FACTS the draft
+    # was built from, plus what the reviewer has since confirmed (supplements + business
+    # context) — so their added facts are treated as supported, not re-flagged.
+    evidence = result.get("_grounded_facts", "") or src
+    for s in result.get("_supplements", []):
+        evidence += f"\nReviewer-confirmed value: {s.get('value', '')}"
+    for f in result.get("facts_used", []):
+        if f.get("source") == "business_context":
+            evidence += f"\nReviewer business context: {f.get('fact', '')}"
+    result["_narrative_flags"] = _narrative_flags(target, evidence)
     # Unfilled placeholders still count as "to fill" (a placeholder isn't a figure the
     # guardrail flags, but the reviewer must still resolve it).
     result["_blanked_figures"] = [_FIGURE_PLACEHOLDER] * target.count(_FIGURE_PLACEHOLDER)

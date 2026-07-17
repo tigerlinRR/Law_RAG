@@ -356,9 +356,29 @@ the production architecture is settled and the first quality improvement is buil
   Kept earnest money as "include when present" (2% overall is only because few corpus deals are
   real estate — not a signal to omit it). Verified on the L&R PSA: guardrail CLEAN, complete
   draft. (2.03/3.02 band data is printed too, for when their ITEM_RULES are added.)
+- **Narrative-claim audit shipped (Task #6, 2026-07-16/17).** The numeric guardrail locks
+  fabricated FIGURES, but a model can still invent a non-numeric claim or a SPELLED-OUT number
+  (found live on the ATM contract: an invented "terminate upon **ten** business days' notice" —
+  the contract says termination is "at any time"; the numeric guardrail missed it because "ten"
+  is a word). `draft._narrative_flags` runs an LLM audit of each substantive draft sentence
+  against the **grounded facts** (the extracted, quote-verified clauses — NOT the raw contract,
+  which avoids long-doc windowing false-positives) and flags unsupported claims. REVIEW-ONLY:
+  never blocks, never alters the draft — purely additive. Skips boilerplate ((c)/qualifier/FLS).
+  Wired into `draft_8k` (hybrid/llm) + recomputed on reverify/supplements (evidence = stored
+  `_grounded_facts` + reviewer supplements + business context, so confirmed facts aren't
+  re-flagged); surfaced in the web banner (`_narrative_flags`). Verified: flags the invented
+  termination-notice, does NOT false-flag the real exclusivity term or the 3.0% fee.
+- **Also this session:** open-ended extraction (long-tail material terms, any contract type) +
+  drafting nudge to include them; party/instrument robustness (`_instrument_noun` prefers a real
+  instrument word so a party role like "Agents" is never taken as the instrument; `_PARTY_TERMS`
+  broadened; `_clean_party` strips trailing "(the \"X\")"); (c)-counterparty picks the
+  non-registrant party. ATM held-out test: exclusivity now captured+drafted, (c)/qualifier
+  correct. **Honest boundary:** self-contained contracts (real-estate PSA) → near-publishable;
+  registered securities offerings (ATM) → correct-but-incomplete (offering size, S-3 file no.,
+  5.1 opinion / 23.1 consent live OUTSIDE the single agreement → supplements/multi-doc).
 - **Next roadmap levers (no training):** #4 tone via facts-stripped few-shot from the customer's
-  own filings (the 17 Richtech ones go here); #5 multi-doc; #6 scoped-AMBER + narrative-claim
-  check; #7 free base-model upgrades.
+  own filings (the 17 Richtech ones go here); #5 multi-doc (contract + prospectus/opinion →
+  offering exhibits); #7 free base-model upgrades.
 
 ## delex fixes + corpus filter shipped — delex fits 2.03/3.02, NOT the 1.01 core (2026-07-16)
 Did the Jetson-side work (no RTX needed): fixed delex quality + built the groundability
