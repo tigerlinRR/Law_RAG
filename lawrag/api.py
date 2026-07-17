@@ -27,7 +27,7 @@ from . import auth, clients, db, export, generations, guardrail
 from .config import ROOT
 from .draft import (ITEM_TITLES, _FIGURE_PLACEHOLDER, _FORWARD_LOOKING_STATEMENTS,
                     _compliance_flags, _narrative_flags, _needs_forward_looking_statements,
-                    add_business_context, draft_8k, draft_filing)
+                    add_business_context, detect_items, draft_8k, draft_filing)
 from .ingest import DocMeta, ingest_file
 from .parsers import NeedsOCR
 from .retrieve import Filters, search
@@ -192,6 +192,22 @@ async def api_ingest(files: list[UploadFile] = File(...), user: dict = Depends(c
 def api_draft_items(user: dict = Depends(current_user)) -> dict:
     """8-K Item types this tool can draft (each has a tailored extraction checklist)."""
     return {"items": [{"item": k, "title": v} for k, v in ITEM_TITLES.items()]}
+
+
+@app.post("/api/detect-items", response_model=None)
+async def api_detect_items(file: UploadFile = File(...), user: dict = Depends(current_user)):
+    """Suggest the 8-K Item(s) an uploaded document triggers, so the UI can pre-check them.
+    Suggestion only — the user confirms/adjusts before drafting."""
+    tmpdir = Path(tempfile.mkdtemp(prefix="lawrag_detect_"))
+    dest = tmpdir / (file.filename or "upload")
+    try:
+        with open(dest, "wb") as f:
+            shutil.copyfileobj(file.file, f)
+        return {"suggested": detect_items(dest)}
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse({"error": "failed", "detail": str(e)}, status_code=500)
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 @app.post("/api/generate/8k", response_model=None)

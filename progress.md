@@ -392,10 +392,17 @@ the production architecture is settled and the first quality improvement is buil
   cached module `REGISTRANT`), so an edit applies to new drafts with **no restart**. Verified
   E2E over HTTP: admin GET/PUT 200 + persisted; non-admin 403. This is CaseMark's
   "registrant as input" done as a first-class admin screen.
-- **Next roadmap levers (no training):** auto-detect triggered Items from the upload (CaseMark's
-  "Item Selection Matrix" — replaces manual checkboxes; pairs with the deal-category classifier);
-  #4 tone via facts-stripped few-shot from the customer's own filings; #5 multi-doc (contract +
-  prospectus/opinion → offering exhibits + 5.1/23.1); #7 free base-model upgrades.
+- **Auto-detect triggered Items shipped (2026-07-17).** On upload, `draft.detect_items` (LLM
+  classifier over the doc head, `POST /api/detect-items`) suggests which 8-K Item(s) the
+  document triggers, with a one-line reason; the Generate tab now **detects → pre-checks the
+  suggested boxes + shows reasons → user confirms/adjusts → Generate** (was drop=immediate
+  draft). SUGGESTION-ONLY (never auto-commits). Conservative prompt explicitly forbids 2.01
+  unless the deal has CLOSED — so it AVOIDS CaseMark's error (CaseMark wrongly reported a 2.01
+  completion for an unclosed PSA). Verified: PSA→1.01 (not 2.01), ATM→1.01, convertible note→2.03.
+- **Next roadmap levers (no training):** #4 tone via facts-stripped few-shot from the customer's
+  own filings; #5 multi-doc (contract + prospectus/opinion → offering exhibits + 5.1/23.1);
+  deepen extraction to match CaseMark's narrative richness while staying grounded; #7 free
+  base-model upgrades.
 
 ## delex fixes + corpus filter shipped — delex fits 2.03/3.02, NOT the 1.01 core (2026-07-16)
 Did the Jetson-side work (no RTX needed): fixed delex quality + built the groundability

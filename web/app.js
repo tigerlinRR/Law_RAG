@@ -470,12 +470,60 @@ async function initGenerate() {
 
 const gz = $("#genzone"), genInput = $("#genInput");
 gz.addEventListener("click", () => genInput.click());
-genInput.addEventListener("change", () => { if (genInput.files.length) generate8k(genInput.files[0]); });
+genInput.addEventListener("change", () => { if (genInput.files.length) pickGenFile(genInput.files[0]); });
 ["dragover", "dragenter"].forEach((ev) =>
   gz.addEventListener(ev, (e) => { e.preventDefault(); gz.classList.add("drag"); }));
 ["dragleave", "drop"].forEach((ev) =>
   gz.addEventListener(ev, (e) => { e.preventDefault(); gz.classList.remove("drag"); }));
-gz.addEventListener("drop", (e) => { if (e.dataTransfer.files.length) generate8k(e.dataTransfer.files[0]); });
+gz.addEventListener("drop", (e) => { if (e.dataTransfer.files.length) pickGenFile(e.dataTransfer.files[0]); });
+
+// On upload, DON'T draft immediately — first auto-detect which 8-K Items the document
+// triggers, pre-check them (the user confirms/adjusts), then draft on the Generate click.
+// Suggestion-only avoids over-triggering (e.g. reporting a 2.01 completion for an unclosed deal).
+let genFile = null;
+$("#gen-run").addEventListener("click", () => { if (genFile) generate8k(genFile); });
+
+async function pickGenFile(file) {
+  genFile = file;
+  const status = $("#genStatus"), sug = $("#gen-suggest"), run = $("#gen-run");
+  $("#genReport").innerHTML = "";
+  sug.hidden = true; run.hidden = true;
+  status.className = "status";
+  status.innerHTML = `<span class="spinner"></span>Reading “${file.name}” and detecting applicable 8-K Items…`;
+  const boxes = document.querySelectorAll("#gen-items input");
+  try {
+    const fd = new FormData(); fd.append("file", file);
+    const d = await (await fetch("/api/detect-items", { method: "POST", body: fd })).json();
+    const suggested = (d.suggested || []);
+    const codes = suggested.map((s) => s.item);
+    boxes.forEach((c) => { c.checked = codes.includes(c.value); });
+    if (!codes.length) { const one = [...boxes].find((c) => c.value === "1.01"); if (one) one.checked = true; }
+    sug.innerHTML = "";
+    if (suggested.length) {
+      sug.appendChild(el("div", "gen-suggest-title",
+        "Suggested from the contract — confirm or adjust the checkboxes above:"));
+      const ul = el("ul", "gen-suggest-list");
+      suggested.forEach((s) => {
+        const li = el("li", null);
+        li.appendChild(el("span", "gs-item", `Item ${s.item}`));
+        li.appendChild(el("span", null, " — " + s.reason));
+        ul.appendChild(li);
+      });
+      sug.appendChild(ul);
+    } else {
+      sug.appendChild(el("div", "gen-suggest-title",
+        "Couldn't auto-detect an Item — defaulted to Item 1.01. Adjust above if needed."));
+    }
+    sug.hidden = false;
+    status.className = "status";
+    status.textContent = `Ready: “${file.name}”. Confirm the Items above, then click Generate 8-K.`;
+    run.hidden = false;
+  } catch (e) {
+    status.className = "status error";
+    status.textContent = "Item detection failed — pick the Items manually and Generate. (" + e.message + ")";
+    run.hidden = false;
+  }
+}
 
 async function generate8k(file) {
   const status = $("#genStatus"), report = $("#genReport");

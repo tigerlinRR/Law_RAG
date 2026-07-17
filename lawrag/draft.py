@@ -697,6 +697,60 @@ def _narrative_flags(disclosure: str, evidence: str) -> list[dict]:
     return flags
 
 
+_ITEM_DETECT_SCHEMA = {
+    "type": "object",
+    "properties": {"items": {
+        "type": "array", "maxItems": 4,
+        "items": {"type": "object", "properties": {
+            "item": {"type": "string", "maxLength": 12},
+            "reason": {"type": "string", "maxLength": 200},
+        }, "required": ["item", "reason"]}}},
+    "required": ["items"]}
+
+_ITEM_DETECT_SYSTEM = (
+    "You classify which SEC Form 8-K Item(s) a source document triggers. Choose ONLY from:\n"
+    "- 1.01 Entry into a Material Definitive Agreement (the company signed a material agreement)\n"
+    "- 1.02 Termination of a Material Definitive Agreement (a material agreement was terminated)\n"
+    "- 2.01 Completion of Acquisition or Disposition of Assets — ONLY if the document shows the "
+    "transaction has actually CLOSED/COMPLETED (e.g. a bill of sale, closing statement, 'the "
+    "closing occurred'); do NOT suggest it for a purchase agreement that is merely signed and "
+    "will close later\n"
+    "- 2.03 Creation of a Direct Financial Obligation (a promissory note, loan, or other debt "
+    "instrument)\n"
+    "- 3.02 Unregistered Sales of Equity Securities (a private placement / unregistered sale of "
+    "stock, warrants, or convertible securities)\n"
+    "- 5.02 Departure or Election of Directors/Officers (appointment, departure, or compensation "
+    "of a director or officer)\n"
+    "Be CONSERVATIVE: suggest an Item only when the document clearly triggers it, with a one-line "
+    "reason. Most agreements trigger 1.01; a note also triggers 2.03; a private stock sale also "
+    "triggers 3.02. If unsure, suggest only 1.01. Never invent an Item outside this list.")
+
+
+def detect_items(contract_path: str | Path) -> list[dict]:
+    """Suggest which 8-K Item(s) the uploaded document triggers, with a one-line reason each.
+    SUGGESTION ONLY — the UI pre-checks these but the user confirms/adjusts (a classifier that
+    auto-commits over-triggers, e.g. reporting a 2.01 completion for a deal that hasn't closed).
+    Reads only the document head; returns [] on failure so the UI falls back to the 1.01 default."""
+    from .parsers import parse
+    text = "\n\n".join(b.text for b in parse(Path(contract_path)))
+    if not text.strip():
+        return []
+    try:
+        out = llm.chat_json(_ITEM_DETECT_SYSTEM,
+                            f"=== SOURCE DOCUMENT (beginning) ===\n{text[:12000]}",
+                            _ITEM_DETECT_SCHEMA, max_tokens=500)
+    except Exception:
+        return []
+    seen, res = set(), []
+    for it in out.get("items", []):
+        m = re.search(r"\d\.\d\d", it.get("item", ""))
+        code = m.group(0) if m else ""
+        if code in ITEM_TITLES and code not in seen:
+            seen.add(code)
+            res.append({"item": code, "title": ITEM_TITLES[code], "reason": it.get("reason", "")})
+    return res
+
+
 def draft_8k(
     contract_path: str | Path,
     item: str = "1.01",
