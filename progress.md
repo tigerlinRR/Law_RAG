@@ -426,9 +426,24 @@ the production architecture is settled and the first quality improvement is buil
     Items, **8.01 drafted from the press release** (correct routing via user assignment), exhibits
     10.1+99.1+104, guardrail CLEAN, 8.01 furnishes Exhibit 99.1. Each Item still runs the numeric
     guardrail + #6 narrative audit against ITS source.
+- **Multi-doc tuning from a real held-out test (2024-09-05 SPA + press release, 2026-07-17).**
+  Compared against the real filing (Items 1.01 + 8.01 + Exhibits 10.1/99.1/99.2/104):
+  - **Detection now classifies by DOCUMENT ROLE:** a press release → 8.01 (or 7.01), NEVER the
+    substantive Item it merely discusses (was mis-tagging the offering press release as 3.02 →
+    press release wasted, no 99.1). Fixed in `_ITEM_DETECT_SYSTEM`. Now: SPA→1.01, press
+    release→8.01, exhibits 10.1+99.1+104 — matches the real filing's structure.
+  - **Narrative audit de-noised:** was firing 8 flags (mostly duplicates + framing/boilerplate).
+    Now dedupes by claim, re-merges sentences split at abbreviations ("…Inc." | "(the Company)…"),
+    skips framing/boilerplate ("entered into", "customary …", "furnished as"), and checks against
+    grounded facts **+ the raw source** (so a real fact the checklist missed isn't false-flagged).
+    Result on the same draft: 8 → 1 flag (the one substantive $-figure sentence — a useful
+    "verify" prompt, not noise).
+  - Honest limit reconfirmed: our 1.01 from the *Form of* SPA is terser than the real 1.01
+    (share counts / placement agent / net proceeds / S-1 file no. live in the prospectus, not the
+    form) — that's the multi-doc/supplement gap, not a bug.
 - **Next roadmap levers (no training):** #4 tone via facts-stripped few-shot from the customer's
-  own filings; deepen extraction to match CaseMark richness while grounded; offering-specific
-  exhibits (5.1/23.1) as reviewer supplements; #7 free base-model upgrades.
+  own filings; deepen extraction; offering-specific exhibits (5.1/23.1) as reviewer supplements;
+  #7 free base-model upgrades.
 
 ## delex fixes + corpus filter shipped — delex fits 2.03/3.02, NOT the 1.01 core (2026-07-16)
 Did the Jetson-side work (no RTX needed): fixed delex quality + built the groundability

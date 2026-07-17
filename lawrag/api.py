@@ -321,7 +321,7 @@ def _recompute_verification(result: dict) -> None:
     # Re-run the #6 narrative-claim audit (review-only) against the GROUNDED FACTS the draft
     # was built from, plus what the reviewer has since confirmed (supplements + business
     # context) — so their added facts are treated as supported, not re-flagged.
-    evidence = result.get("_grounded_facts", "") or src
+    evidence = (result.get("_grounded_facts", "") or "") + "\n\n=== SOURCE DOCUMENT ===\n" + src
     for s in result.get("_supplements", []):
         evidence += f"\nReviewer-confirmed value: {s.get('value', '')}"
     for f in result.get("facts_used", []):

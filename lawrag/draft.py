@@ -655,7 +655,8 @@ def _compliance_flags(item: str, disclosure: str) -> list[dict]:
 # alters the draft — a purely additive safety net, so it is always safe to run.
 _NARRATIVE_SKIP = re.compile(
     r"qualified in its entirety|does not purport to be complete|material relationship between|"
-    r"forward-looking statements|incorporated herein by reference|Exhibit 10\.1", re.I)
+    r"forward-looking statements|incorporated herein by reference|Exhibit \d|"
+    r"\bentered into\b|customary representations|other customary|furnished as", re.I)
 
 _NARRATIVE_SCHEMA = {
     "type": "object",
@@ -688,21 +689,33 @@ def _narrative_flags(disclosure: str, evidence: str) -> list[dict]:
     (never blocks). Boilerplate / (c) statement / FLS legend / exhibit qualifier are skipped."""
     if not evidence.strip() or not disclosure.strip():
         return []
-    sents = [s.strip() for s in re.split(r"(?<=[.;])\s+", disclosure) if len(s.strip()) > 25]
-    claims = [s for s in sents if not _NARRATIVE_SKIP.search(s)]
+    # Split into sentences, re-merging fragments split at an abbreviation (".Inc." ) or a
+    # parenthetical/lowercase continuation ("(the Company)…") so a claim isn't broken up.
+    sents: list[str] = []
+    for p in re.split(r"(?<=[.;])\s+", disclosure):
+        p = p.strip()
+        if not p:
+            continue
+        if sents and (re.search(r"\b(?:Inc|LLC|L\.P|Corp|Co|Ltd|No|U\.S|Nasdaq)\.$", sents[-1])
+                      or p[0] in "(“\"'" or p[0].islower()):
+            sents[-1] += " " + p
+        else:
+            sents.append(p)
+    claims = [s for s in sents if len(s) > 30 and not _NARRATIVE_SKIP.search(s)]
     if not claims:
         return []
     numbered = "\n".join(f"{i + 1}. {c}" for i, c in enumerate(claims))
     user = (f"=== DRAFT CLAIMS ===\n{numbered}\n\n"
-            f"=== GROUNDED FACTS (the only supported source) ===\n{evidence[:CONFIG.llm_max_ctx_chars]}")
+            f"=== GROUNDED FACTS + SOURCE (the only supported source) ===\n{evidence[:CONFIG.llm_max_ctx_chars]}")
     try:
         out = llm.chat_json(_NARRATIVE_SYSTEM, user, _NARRATIVE_SCHEMA, max_tokens=1500)
     except Exception:
         return []
-    flags = []
+    flags, seen = [], set()
     for f in out.get("unsupported", []):
         idx = f.get("index")
-        if isinstance(idx, int) and 1 <= idx <= len(claims):
+        if isinstance(idx, int) and 1 <= idx <= len(claims) and claims[idx - 1] not in seen:
+            seen.add(claims[idx - 1])
             flags.append({"claim": claims[idx - 1], "issue": f.get("issue", "")})
     return flags
 
@@ -731,9 +744,15 @@ _ITEM_DETECT_SYSTEM = (
     "stock, warrants, or convertible securities)\n"
     "- 5.02 Departure or Election of Directors/Officers (appointment, departure, or compensation "
     "of a director or officer)\n"
-    "Be CONSERVATIVE: suggest an Item only when the document clearly triggers it, with a one-line "
-    "reason. Most agreements trigger 1.01; a note also triggers 2.03; a private stock sale also "
-    "triggers 3.02. If unsure, suggest only 1.01. Never invent an Item outside this list.")
+    "CLASSIFY BY THE DOCUMENT'S ROLE, NOT MERELY ITS SUBJECT. A PRESS RELEASE, news "
+    "announcement, or public statement -> Item 8.01 (or 7.01 if it is expressly a Regulation FD "
+    "disclosure) — EVEN IF it discusses a financing, acquisition, or securities sale. The "
+    "substantive Item (1.01/2.03/3.02/2.01) is triggered by the underlying AGREEMENT/INSTRUMENT, "
+    "NOT by a press release about it. So: an agreement/contract -> its substantive Item; a press "
+    "release -> 8.01. Be CONSERVATIVE: suggest an Item only when the document clearly triggers "
+    "it, with a one-line reason. Most agreements trigger 1.01; a note also triggers 2.03; a "
+    "private stock sale also triggers 3.02. If unsure, suggest only 1.01. Never invent an Item "
+    "outside this list.")
 
 
 _NEWS_SCHEMA = {"type": "object",
@@ -912,7 +931,10 @@ def draft_8k(
     # Check against the extracted grounded facts (compact, complete) not the raw contract.
     if mode in ("hybrid", "llm"):
         result["_grounded_facts"] = _facts_block(review)
-        result["_narrative_flags"] = _narrative_flags(result["disclosure"], result["_grounded_facts"])
+        # Evidence = extracted clauses + the raw source, so a real fact the checklist happened
+        # to miss (but that IS in the document) is not falsely flagged as unsupported.
+        evidence = result["_grounded_facts"] + "\n\n=== SOURCE DOCUMENT ===\n" + full_text
+        result["_narrative_flags"] = _narrative_flags(result["disclosure"], evidence)
     # Keep the source text + anchored derivations so an edited draft can be re-verified
     # in-app (POST /reverify) without re-parsing the contract.
     result["_source_text"] = full_text
