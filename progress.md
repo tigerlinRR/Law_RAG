@@ -5,14 +5,39 @@ Living status doc so a fresh chat can resume fast. Pairs with:
   `MEMORY.md` index; the dense history is in `law-rag-project-plan.md`).
 - **`CLAUDE.md`** (points here) and the repo `README.md` (product/architecture docs).
 
-_Last updated: 2026-07-16._
+_Last updated: 2026-07-17._
+
+## ⭐ CURRENT STATE (2026-07-17) — READ THIS FIRST
+**Architecture is SETTLED (v1-spine): the model UNDERSTANDS/extracts, CODE generates,
+the guardrail backstops, humans fill gaps. Facts never come from model weights.**
+- **Served model:** the PLAIN BASE `qwen3.6` (container `lawrag-llm`, :8012). The v2 style
+  adapter and the delex v4/v5 idea are **RETIRED** (fine-tuning fabricates; delex only worked
+  for transaction Items — both dead ends, kept only for history). `.env LLM_MODEL=qwen3.6`.
+- **Default drafting = `draft_8k(mode="hybrid")`**: base model drafts in 8-K style →
+  `_lock_figures` blanks ungrounded numbers → numeric guardrail (RED blocks fabrication) →
+  `_narrative_flags` (#6, review-only, flags invented non-numeric claims). `assemble` = optional
+  fully-deterministic mode.
+- **Shipped & working (all this on the base model, no training):** extraction repair pass;
+  open-ended "other material terms" extraction (any contract type); company-neutral data-derived
+  materiality rubric; supplements/gap-fill UX; registrant profile as an editable admin input
+  (`registrant.json` + Company web tab); auto-detect triggered Items on upload (suggest+confirm,
+  by document role); **multi-document filing** (contract + press release + …, user routes each
+  doc→Item; news Items 7.01/8.01 furnish the press release as Exhibit 99.1; merged exhibit index);
+  `.txt` input.
+- **NEXT:** #4 — per-customer **few-shot style** (facts-stripped exemplars from the customer's own
+  past 8-Ks) so drafts read like that filer wrote them; then deepen extraction. NO fine-tuning.
+- **Run:** LLM = Docker `lawrag-llm` on :8012; web = manual `./.venv/bin/python scripts/serve.py`
+  on :8080 (restart + HTTP-verify after any `lawrag/*.py` edit). Full design report:
+  `8K_DRAFTING_FINDINGS_REPORT.md`.
+- Sections below this are the DATED HISTORY of how we got here (adapter/delex era included) —
+  context, not current instructions.
 
 ## What this is
 Fully-local, private RAG + drafting system for Richtech's legal counsel, on a Jetson
-AGX Thor. Two things live here: (1) the **8-K drafting** tool (contract → SEC Form 8-K
-Item disclosure, RAG-grounded), and (2) an experimental **fine-tuned 8-K style
-adapter**. Goal is to commercialize as a per-company product (shared base + per-filing
-adapter + per-customer style via RAG/rubric).
+AGX Thor. The **8-K drafting** tool turns a contract (+ optional supplements) into an SEC Form
+8-K, grounded in the source documents. Goal: commercialize as a per-company product (shared base
+model + per-customer style via few-shot/rubric, NOT per-customer fine-tuning). An earlier
+fine-tuned adapter + delex experiment was tried and RETIRED (see CURRENT STATE).
 
 ## Current phase — 8-K LoRA adapter, VALIDATED
 - Built a training corpus from **public EDGAR** filings (~90 companies, all 8-K Items):

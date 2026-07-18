@@ -19,12 +19,13 @@ Read these first on every session (they carry the state across cleared chats):
 - **Reply to the user in Chinese.**
 - **Never commit**: `data/`, `storage/`, `README.zh-CN.md` (English `README.md` only to
   GitHub), or `Richtech Materials for Potential AI Training.docx`. (All gitignored.)
-- 8-K drafting: **facts never come from the model** — they come from the source document
-  (extraction/delex + deterministic backfill), and the `lawrag.guardrail` RED-blocks any
-  figure not grounded in the source. The fine-tuned adapter provides only *structure/style*
-  (v4/v5 delex adapters emit typed placeholders, never real values). Every draft needs
-  lawyer sign-off. **Live model + drafting-mode status changes often — check `progress.md`
-  for which model is served (v2 interim vs v4/v5 delex) and the current default `mode`.**
+- 8-K drafting: **facts never come from the model.** Architecture is SETTLED (v1-spine): the
+  model EXTRACTS from the source doc(s), CODE generates, `lawrag.guardrail` RED-blocks any
+  ungrounded figure, `_narrative_flags` flags invented non-numeric claims, and humans fill gaps.
+  **Served model = the PLAIN BASE `qwen3.6` (Docker `lawrag-llm` :8012); default `mode="hybrid"`.
+  The v2 fine-tuned adapter and the delex v4/v5 idea are RETIRED** (fine-tuning fabricates; both
+  were dead ends — history only). Every draft needs lawyer sign-off. See `progress.md`
+  "CURRENT STATE" for the live picture; `8K_DRAFTING_FINDINGS_REPORT.md` for the full rationale.
 - After editing `lawrag/*.py`: restart the web server and verify with a real HTTP
   request (no hot-reload).
 
