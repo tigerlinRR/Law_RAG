@@ -17,8 +17,14 @@ Read these first on every session (they carry the state across cleared chats):
 
 ## Non-negotiable standing rules
 - **Reply to the user in Chinese.**
+- **Auto-commit + push when a task is done.** After finishing a task (edits verified, server
+  restarted/HTTP-checked as required), commit and `git push origin main` WITHOUT asking — this
+  is standing authorization. Keep honoring the "never commit" list below. Use clear English
+  commit messages with the standard Co-Authored-By trailer.
 - **Never commit**: `data/`, `storage/`, `README.zh-CN.md` (English `README.md` only to
-  GitHub), or `Richtech Materials for Potential AI Training.docx`. (All gitignored.)
+  GitHub), or `Richtech Materials for Potential AI Training.docx`. (All gitignored.) Also skip
+  untracked local-only files like `.env.bak-8k` and `scratchpad/` — stage only the files you
+  changed for the task, never `git add -A`.
 - 8-K drafting: **facts never come from the model.** Architecture is SETTLED (v1-spine): the
   model EXTRACTS from the source doc(s), CODE generates, `lawrag.guardrail` RED-blocks any
   ungrounded figure, `_narrative_flags` flags invented non-numeric claims, and humans fill gaps.
