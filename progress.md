@@ -470,6 +470,31 @@ the production architecture is settled and the first quality improvement is buil
   own filings; deepen extraction; offering-specific exhibits (5.1/23.1) as reviewer supplements;
   #7 free base-model upgrades.
 
+## Three quality fixes from a real held-out PSA review (2026-07-20)
+Reviewed a fresh generation on the real 2026-04-01 EBS Rainbow PSA (accession 0001213900-26-041153,
+$21.18M, 79,325 sq ft; guardrail CLEAN, near-publishable). Found + fixed three defects:
+- **Duplicate qualifier paragraph** (`draft._ensure_exhibit_qualifier`): the de-dup guard tested
+  for the exact string `"qualified in its entirety"`, but the model sometimes drops "its"
+  ("qualified in entirety") → guard misses → a second qualifier is appended. Fix: match
+  `qualified in (?:its )?entirety` and normalize "in entirety" → "in its entirety". Unit-verified
+  (2 paras → 1).
+- **Narrative audit false positives** (`draft._narrative_flags`): the single batch "find the
+  unsupported claims" call has high recall but poor precision — it flagged ALL 4 substantive
+  sentences of the clean draft even though every fact quote-verifies (issue field = whole sentence
+  = not real analysis). Measured: the SAME model, asked ONE isolated claim at a time, was 4/4
+  correct. Fix: added a **confirmation pass** — each batch-flagged claim is independently
+  re-checked (`_NARRATIVE_CONFIRM_SYSTEM/_SCHEMA`) and DROPPED if found supported; review-only so
+  a failed check keeps the flag. Verified on the real draft: 4 → 0 false positives, and an injected
+  fabrication ("terminate on ten business days' notice" vs the contract's "at any time") is still
+  KEPT. This is the adversarial-verify pattern (batch = recall, per-claim = precision).
+- **`<think>` reasoning leaked into the grounded facts / review pack** (`summarize._merge`): on
+  long (map-reduced, >90k-char) docs the reduce-summary used plain `llm.chat`, so the base model
+  wrote its "Here's a thinking process: 1. Analyze… 4. Check Constraints" preamble straight into
+  the "Contract summary" field (no `<think>` tags, so a tag-strip wouldn't catch it). Fix: route
+  the reduce through `chat_json` with `_SUMMARY_SCHEMA` (guided JSON can't emit a preamble), like
+  extraction already does. Verified: clean 3-sentence summary, no reasoning.
+Server restarted + HTTP-verified after the `draft.py`/`summarize.py` edits.
+
 ## delex fixes + corpus filter shipped — delex fits 2.03/3.02, NOT the 1.01 core (2026-07-16)
 Did the Jetson-side work (no RTX needed): fixed delex quality + built the groundability
 filter. Both are in the repo (pushed). **RTX handoff (tables + commands): `training/DELEX_V5_FINDINGS.md`.**

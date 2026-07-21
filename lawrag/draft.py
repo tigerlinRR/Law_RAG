@@ -165,7 +165,12 @@ def _ensure_exhibit_qualifier(disclosure: str) -> str:
     PARTY role when the agreement has no defined term (e.g. 'description of the Purchaser') —
     fix both. It's fixed boilerplate, not a fact, so needs no source citation."""
     noun = _instrument_noun(disclosure)
-    if "qualified in its entirety" in disclosure.lower():
+    if re.search(r"qualified in (?:its )?entirety", disclosure, re.I):
+        # The model occasionally drops "its" ("qualified in entirety"); normalize so the
+        # text is correct AND so this presence-check reliably fires — otherwise a second
+        # qualifier gets appended below, producing a duplicate paragraph (observed bug).
+        disclosure = re.sub(r"qualified in entirety", "qualified in its entirety",
+                            disclosure, flags=re.I)
         # Repair a qualifier the model anchored to a party role instead of the instrument.
         m = re.search(r"description of the ([A-Za-z ]+?) does not purport", disclosure)
         if m and m.group(1).strip().lower() in _PARTY_TERMS:
@@ -680,6 +685,26 @@ _NARRATIVE_SYSTEM = (
     "claim is plausibly supported by the facts, treat it as supported. For each unsupported "
     "claim return its NUMBER in 'index' and the specific unsupported part in 'issue'.")
 
+# Second-pass confirmation for ONE candidate claim in isolation (see _narrative_flags). The
+# model is reliable on a single claim; this filters the batch pass's false positives.
+_NARRATIVE_CONFIRM_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "supported": {"type": "boolean"},
+        "quote": {"type": "string", "maxLength": 300},
+    },
+    "required": ["supported"]}
+
+_NARRATIVE_CONFIRM_SYSTEM = (
+    "You verify whether ONE claim from a draft SEC Form 8-K disclosure is supported by the "
+    "EVIDENCE (facts extracted from the source contract, plus the source text). Set "
+    "supported=true if the evidence contains the specific factual terms the claim asserts — "
+    "a number, date, party, right, obligation, amount, duration, fee, or condition — treating "
+    "a reasonable paraphrase or an equivalent format ($21.18 million = $21,180,000) as "
+    "supported, and quote the exact supporting text in 'quote'. Set supported=false ONLY if "
+    "the specific term appears INVENTED — not present in the evidence in any form. When in "
+    "doubt, supported=true.")
+
 
 def _narrative_flags(disclosure: str, evidence: str) -> list[dict]:
     """Flag substantive claims in `disclosure` not supported by `evidence` (the extracted,
@@ -717,7 +742,28 @@ def _narrative_flags(disclosure: str, evidence: str) -> list[dict]:
         if isinstance(idx, int) and 1 <= idx <= len(claims) and claims[idx - 1] not in seen:
             seen.add(claims[idx - 1])
             flags.append({"claim": claims[idx - 1], "issue": f.get("issue", "")})
-    return flags
+    # Confirmation pass. The batch call above has high recall but poor precision — it tends
+    # to flag every fact-dense sentence even when the term IS in the evidence (measured: it
+    # flagged all 4 substantive sentences of a clean PSA draft whose facts all quote-verify).
+    # Independently re-check each flagged claim on its own and DROP any the check finds
+    # supported. A single, isolated claim + the same evidence is a task the model does
+    # reliably (measured 4/4 correct), so this removes the false positives while keeping a
+    # genuine fabrication (which fails the isolated check too). Review-only, so a failed
+    # check errs toward KEEPING the flag.
+    ev = evidence[:CONFIG.llm_max_ctx_chars]
+    confirmed = []
+    for fl in flags:
+        try:
+            chk = llm.chat_json(
+                _NARRATIVE_CONFIRM_SYSTEM,
+                f"CLAIM: {fl['claim']}\n\nEVIDENCE:\n{ev}",
+                _NARRATIVE_CONFIRM_SCHEMA, max_tokens=400)
+        except Exception:
+            confirmed.append(fl)
+            continue
+        if not chk.get("supported", False):
+            confirmed.append(fl)
+    return confirmed
 
 
 _ITEM_DETECT_SCHEMA = {

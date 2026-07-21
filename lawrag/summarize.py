@@ -72,6 +72,13 @@ REVIEW_SCHEMA = {
     "required": ["doc_type", "summary", "parties", "clauses", "key_risks"],
 }
 
+# Map-reduce reduce step: condense the per-window summaries into one. Guided JSON so the
+# base model emits ONLY the summary (no leaked "thinking process" preamble).
+_SUMMARY_SCHEMA = {
+    "type": "object",
+    "properties": {"summary": {"type": "string", "maxLength": 800}},
+    "required": ["summary"]}
+
 _SYSTEM = (
     "You are a senior corporate attorney assisting with contract due diligence. "
     "Extract ONLY information explicitly present in the contract text. Never invent "
@@ -210,11 +217,22 @@ def _merge(partials: list[dict], checklist: list[str]) -> dict:
     ordered = [by_clause[c] for c in checklist if c in by_clause]
     extras = [cl for name, cl in by_clause.items() if name not in checklist]
     merged["clauses"] = (ordered + extras) or list(by_clause.values())
-    # Summarize the concatenated per-part summaries into one.
+    # Summarize the concatenated per-part summaries into one. Use guided JSON (NOT plain
+    # chat) so the base model can't leak its reasoning preamble ("Here's a thinking
+    # process: 1. ...") into the summary text — observed polluting the grounded facts and
+    # the lawyer-facing review pack on long (map-reduced) documents.
     joined = " ".join(p.get("summary", "") for p in partials)
-    merged["summary"] = llm.chat(
-        "You condense text.", f"Summarize in 3-5 sentences:\n{joined}",
-        max_tokens=512) if joined else ""
+    if joined:
+        try:
+            out = llm.chat_json(
+                "You condense text into a single neutral summary. Output only the summary.",
+                f"Condense into 3-5 plain sentences:\n{joined}",
+                _SUMMARY_SCHEMA, max_tokens=512)
+            merged["summary"] = (out.get("summary") or "").strip()
+        except Exception:
+            merged["summary"] = ""
+    else:
+        merged["summary"] = ""
     return merged
 
 
