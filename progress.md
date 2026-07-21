@@ -515,6 +515,30 @@ that were NOT real problems (guardrail was CLEAN). Root-caused + fixed all three
   the reverify path on the stored PSA: 8 rows/3 UNVERIFIED -> 7 rows/0 UNVERIFIED, guardrail clean.
 Server restarted + HTTP health-checked after the `draft.py`/`summarize.py`/`api.py` edits.
 
+## Business-context merge now syncs the per-Item sections (2026-07-21)
+Compared our draft of the EBS Rainbow PSA against the **real filed 8-K** (accession
+0001213900-26-041153). The only substantive gap was the real filing's forward-looking
+business-context sentence ("The Company intends to utilize the Property as a strategic
+U.S.-based facility … to support the continuous improvement of the Company's robotics and AI
+systems") + the PSLRA Forward-Looking Statements safe-harbor legend it triggers — both by
+design supplied by the human via the "Business / strategic context" box, not the model. Our
+`_FORWARD_LOOKING_STATEMENTS` is byte-for-byte identical to the real filing's legend.
+- **Bug found while testing that flow:** `draft.add_business_context` merged the context into
+  the top-level `disclosure` but NOT the matching `_items[]` section. Export and the on-screen
+  "Filing content" render from `_items`, so the merged sentence was invisible in the actual
+  filing while the FLS legend still appeared → an FLS legend with no forward-looking sentence
+  in the body. Fixed: also update the primary (non-cross-ref) `_items` section's opening
+  paragraph. Verified: after the fix both top-level and `_items[0]` carry the sentence, in the
+  right position (after the asset description, before the price), FLS present.
+  - NOTE: pre-fix generations (e.g. the one downloaded as "Draft (13)") stay stale in the DB;
+    re-add the business context (or regenerate) to pick up the sync.
+- **Remaining real gap vs the filing (candidate next fix):** the real Exhibit index adds the
+  parties to the 10.1 description ("… by and between the Company and PSIF EBS Rainbow LLC") and
+  a `*` **Item 601(a)(5)** footnote ("Certain annexes, schedules and exhibits have been omitted
+  … agrees to furnish supplementally …") because the PSA's Exhibits A–E are omitted. Ours omits
+  both. (Cosmetic-only deltas: real signature date = filing date Apr 7 vs our event date Apr 1.)
+Server restarted + HTTP-verified after the `draft.py` edit.
+
 ## delex fixes + corpus filter shipped — delex fits 2.03/3.02, NOT the 1.01 core (2026-07-16)
 Did the Jetson-side work (no RTX needed): fixed delex quality + built the groundability
 filter. Both are in the repo (pushed). **RTX handoff (tables + commands): `training/DELEX_V5_FINDINGS.md`.**

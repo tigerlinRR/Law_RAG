@@ -1225,6 +1225,24 @@ def add_business_context(draft: dict, note: str) -> dict:
 
     new_draft = dict(draft)
     new_draft["disclosure"] = "\n\n".join(paras)
+    # Keep the per-Item sections in sync — export AND the on-screen "Filing content" render
+    # from `_items`, not the top-level `disclosure`. If we update only the latter, the merged
+    # context is invisible in the actual filing while the FLS legend (set below) still shows,
+    # producing an FLS legend with no forward-looking sentence in the body (observed bug).
+    items = draft.get("_items")
+    if items:
+        new_items = []
+        for s in items:
+            sec_paras = (s.get("disclosure") or "").split("\n\n")
+            if (not s.get("cross_ref") and s.get("item") == item
+                    and sec_paras and sec_paras[0] == opening):
+                sec = dict(s)
+                sec_paras[0] = paras[0]
+                sec["disclosure"] = "\n\n".join(sec_paras)
+                new_items.append(sec)
+            else:
+                new_items.append(s)
+        new_draft["_items"] = new_items
     new_draft["facts_used"] = list(draft.get("facts_used") or []) + [{
         "fact": added_text,
         "source_quote": note,
