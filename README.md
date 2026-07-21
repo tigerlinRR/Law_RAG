@@ -145,22 +145,32 @@ tailnet) and optionally SSO.
 
 ## 8-K drafting (experiment)
 
-RAG-grounded drafting. **Facts always come from the source contract via retrieval +
-extraction — never from model memory.** A fine-tuned **style** adapter (see below,
-now deployed) shapes *how* the disclosure reads; a deterministic **fact guardrail**
-(below) is the safety net that blocks any figure not grounded in the source. Split of
-concerns: RAG = facts, adapter = style, guardrail = the compliance red line.
+RAG-grounded drafting. **Facts always come from the source document(s) via extraction —
+never from model memory.** The architecture is **SETTLED (v1-spine): the model
+UNDERSTANDS/extracts, CODE generates, a deterministic guardrail backstops, and humans
+fill the gaps.** Split of concerns: extraction = facts, code/prompt + rubric = structure
+& tone, guardrail = the compliance red line.
 
-1. **Extract facts** from the source contract with the existing due-diligence
-   engine (same clause checklist, verbatim quotes).
-2. **Precedents are OFF by default** (`draft_8k` `n_precedents=0`). The style adapter
-   already carries filing structure/tone in its weights, so in-prompt precedents are
-   redundant — and worse, the model copied their *facts* (share counts, file numbers,
-   registered-vs-private-placement) into the draft, contradicting the source. Retrieval
-   of same-Item precedents (`documents.meta.filing_items`, a JSONB array matched by
-   containment) is still available (`n_precedents>0`) for the un-adapted base model, but
-   the deployed adapter runs precedent-free — which also means pure generation needs no
-   DB/embed/rerank.
+- **Served model = the PLAIN BASE `Qwen3.6-35B` (Docker `lawrag-llm`, :8012).** An earlier
+  fine-tuned *style* adapter (v2) and a delexicalized variant (v4/v5) were built, validated,
+  and then **RETIRED** — fine-tuning fabricates figures (the exact compliance red line), and
+  a base-vs-adapter A/B on a real deal found the base model *more* accurate on the
+  accuracy-first spine (more facts extracted + verified, no `<think>` leak under guided
+  JSON). See "Retired: fine-tuned adapter / delex" below for the full history. Per-customer
+  house *style* is planned as facts-stripped few-shot from that customer's own filings, **not**
+  fine-tuning.
+
+1. **Extract facts** from the source document with the due-diligence engine (Item-specific
+   clause checklist, verbatim quotes), followed by a **verify-gated repair pass**
+   (`summarize._repair_extraction`): any clause whose quote failed verification, or that came
+   back "Not found", gets a targeted second pass — a repair is accepted **only if the new
+   quote verifies against the source**, so it improves fidelity and completeness while never
+   inventing. Long documents are map-reduced with window overlap.
+2. **Precedents are OFF by default** (`draft_8k` `n_precedents=0`). On the base model, in-prompt
+   precedents caused fact leakage (the model copied their share counts / file numbers into the
+   draft), so pure generation runs precedent-free — which also means it needs no DB/embed/rerank.
+   Same-Item precedent retrieval (`documents.meta.filing_items`, a JSONB containment match) is
+   still available with `n_precedents>0` for comparison.
 3. **Draft — figures are hard-locked to the source. Three `draft_8k(mode=...)` modes:**
    - **`hybrid` (default):** the model drafts the disclosure in its 8-K style, then
      `draft._lock_figures` replaces **every figure not grounded in the source** (or a
@@ -172,31 +182,38 @@ concerns: RAG = facts, adapter = style, guardrail = the compliance red line.
    - **`assemble`:** the disclosure is built deterministically from the verified extracted
      clauses (+ derived share count) — **the model writes no prose at all, so nothing
      (number OR narrative) can be imagined.** Zero-invention; prose is templated and omits
-     fields the extraction missed (errs toward omission). This exists because the adapter,
-     even precedent-free, confabulated whole narratives leaked from its training memory.
-   - **`llm`:** raw LLM drafting, no locking (legacy / comparison) — it uses *only* the
-     extracted
-   contract facts; every disclosed fact is cited back to its verbatim quote in
-   `facts_used`, missing facts are marked `[NOT STATED IN CONTRACT]` (never
-   invented), and the standard "qualified in its entirety by reference to
-   Exhibit 10.1" closing is guaranteed. Every citation (here and in the
-   due-diligence engine's clause quotes) is checked programmatically against the
-   source text (`summarize.verify_quote`) — a citation not found verbatim is
-   flagged `⚠ UNVERIFIED` rather than silently trusted.
-   - **Regulatory framework baked in (from Richtech counsel).** Each Item's
-     mandatory SEC requirements are injected into the prompt via `ITEM_RULES`.
-     For **Item 1.01** this encodes the must-disclose set — (a) date, (b)
-     parties, (c) a material-relationship statement (auto-included in standard
-     form, flagged for counsel since it can't be derived from the contract), (d)
-     material terms — plus the **materiality standard** (the reasonable-
-     shareholder / "total mix" test, erring toward *including* an arguably
-     material term since omission is the greater risk) and a **neutral,
-     no-puffery tone** requirement. Every draft carries a `_compliance` summary
-     (a checklist of those requirements marked satisfied / missing) shown in the
-     web view and in the exported appendix, so a reviewer sees the SEC-requirement
-     QC at a glance. (The full framework is Item-1.01-specific today, matching
-     counsel's guidance; other Items get the general checks until per-Item
-     guidance is added.)
+     fields the extraction missed (errs toward omission). The max-safety option.
+   - **`llm`:** raw LLM drafting, no locking (legacy / comparison).
+
+   Every disclosed fact is cited back to its verbatim quote in `facts_used`; the standard
+   "qualified in its entirety by reference to Exhibit 10.1" closing is guaranteed exactly
+   once (de-dup tolerates the model dropping "its"). Every citation (here and in the
+   due-diligence engine's clause quotes) is checked programmatically against the source text
+   (`summarize.verify_quote`) — a citation not found verbatim is flagged `⚠ UNVERIFIED` rather
+   than silently trusted. The check is **ellipsis-aware**: a quote that elides non-contiguous
+   language ("A … B") verifies iff every segment appears verbatim in the source in order, so a
+   genuine elided quote isn't falsely flagged while a paraphrase/fabrication still fails.
+   Required boilerplate assertions (the (c) material-relationship statement, the exhibit
+   qualifier) are kept out of the fact→source trace — they aren't source-grounded facts (they're
+   covered by the SEC-requirement checks), so they never show a misleading `⚠ UNVERIFIED`.
+   - **Narrative-claim audit (review-only).** The numeric guardrail (step 4) locks fabricated
+     *figures*, but a model can still invent a *non-numeric* claim or a spelled-out number
+     ("terminate on **ten** business days' notice"). `draft._narrative_flags` runs an LLM audit
+     of each substantive sentence against the grounded facts + source, then **independently
+     re-checks each flagged claim in isolation and drops any it finds supported** (a batch "find
+     the unsupported" pass over-flags; the isolated re-check restores precision). It never blocks
+     and never edits the draft — purely additive; boilerplate/(c)/qualifier/FLS are skipped.
+   - **Regulatory framework baked in.** Each Item's mandatory SEC requirements are
+     injected into the prompt via `ITEM_RULES`. For **Item 1.01** this encodes the
+     must-disclose set — (a) date, (b) parties, (c) a material-relationship statement
+     (auto-included in standard form, flagged for counsel since it can't be derived from
+     the contract), (d) material terms — plus the **materiality standard** (the reasonable-
+     shareholder / "total mix" test, erring toward *including* an arguably material term
+     since omission is the greater risk) and a **neutral, no-puffery tone** requirement.
+     Every draft carries a `_compliance` summary (a checklist of those requirements marked
+     satisfied / missing) shown in the web view and in the exported appendix, so a reviewer
+     sees the SEC-requirement QC at a glance. (The full framework is Item-1.01-specific
+     today; other Items get the general checks until per-Item guidance is added.)
 4. **Reconcile every figure (fact guardrail).** After drafting, `lawrag.guardrail`
    normalizes then reconciles each material datum (currency, share/unit counts, %,
    dates, parties) in the draft against the source contract — pure local text, no DB.
@@ -234,14 +251,25 @@ concerns: RAG = facts, adapter = style, guardrail = the compliance red line.
    --review-pdf` for the pack) expose both; the API serves the filing at
    `/export/word|pdf` and the pack at `/export/review-word|review-pdf`.
 
-**Multiple Items in one filing.** Real 8-Ks bundle several Items, so the Generate tab
-takes a **multi-select** (and the API a comma-separated `items`). `draft.draft_filing`
-drafts each *substantive* Item from the contract and auto-fills recognized
-*cross-reference* Items (e.g. 3.02 → 1.01, 2.01/2.03 → 1.01) with the standard
-"incorporated by reference into this Item X" boilerplate (no LLM, no fabrication). All
-sections render into one filing (cover → each Item → 9.01 → signature). Items that need
-documents outside the contract — e.g. **Item 8.01** press releases, or extra exhibits —
-are not drafted (they aren't in the source); supply those separately.
+**Auto-detect the triggered Item(s).** On upload, `draft.detect_items` (an LLM classifier
+over the document head, `POST /api/detect-items`) suggests which 8-K Item(s) the document
+triggers, with a one-line reason, and the Generate tab **pre-checks the suggestion for the
+user to confirm or adjust** (suggestion-only, never auto-committed). It classifies by
+*document role*: a press release → 8.01 (or 7.01), **never** the substantive Item it merely
+discusses; and it is conservative about 2.01 — it will not suggest "completion" for a
+purchase agreement that is only signed and will close later (a known failure mode of some
+cloud rivals).
+
+**Multiple documents, multiple Items in one filing.** Real 8-Ks bundle several Items and
+often several documents (a contract *and* a press release). The Generate tab accepts **one or
+more files** — each becomes a card whose detected Item(s) are pre-checked — and the user
+routes each document to the Item(s) it covers. `draft.draft_filing` drafts each *substantive*
+Item from its source document, drafts **news Items 7.01 / 8.01 from a press release** (`.txt`
+supported) and furnishes it as **Exhibit 99.1**, and auto-fills recognized *cross-reference*
+Items (e.g. 3.02 → 1.01, 2.01/2.03 → 1.01) with the standard "incorporated by reference"
+boilerplate (no LLM, no fabrication). Every Item runs the numeric guardrail + narrative audit
+against *its* source. All sections render into one filing (cover → each Item → merged 9.01
+exhibit index → signature).
 
 ```bash
 # Tag historical 8-Ks with their Item number(s) at ingest (auto-detected, or manual
@@ -344,58 +372,50 @@ checklist passed to the due-diligence engine (`summarize.review_contract`).
 | 3.02 | Unregistered Sales of Equity Securities | securities, price, exemption relied upon, use of proceeds |
 | 5.02 | Departure/Election of Directors or Officers | name, position, event, effective date, compensatory terms |
 
-*Deliberately excluded* are event-driven Items with no underlying contract to
-draft from — bankruptcy (1.03), results of operations (2.02), delisting notices
-(3.01), auditor changes (4.01/4.02), vote results (5.07), and Regulation FD /
-other events (7.01/8.01). This tool drafts a disclosure *from a document*; those
-Items don't have one.
+**News Items** — Regulation FD (7.01) and Other Events (8.01) — are drafted from a **press
+release** supplied as a second document (see multi-document filing above), which is then
+furnished as Exhibit 99.1. *Deliberately excluded* are event-driven Items with no underlying
+*document* to draft from — bankruptcy (1.03), results of operations (2.02), delisting notices
+(3.01), auditor changes (4.01/4.02), vote results (5.07). This tool drafts a disclosure *from
+a document*; those Items don't have one.
 
-**Materiality rubric (Item 1.01) — learning *what counsel treats as material*,
-not just how they phrase it.** Matching precedents' tone and structure isn't
-enough on its own: real filings also make deliberate *inclusion/omission*
-choices (e.g. governing law is essentially never called out; earnest money
-always is for a real-estate deal) that a generic checklist doesn't capture.
-With only 17 real Item 1.01 filings on hand, fine-tuning would memorize rather
-than generalize — not enough data for gradient-based weight updates to learn a
-reliable pattern. Instead we built an explicit, auditable rubric by systematically
-comparing **all 17 of Richtech's real Item 1.01 8-Ks against their underlying
-source contracts** (`data/RR contracts/`, one contract per filing, two filings
-sharing a sibling's agreement as a follow-on/amendment): for each contract, every
-checklist term found by the extraction engine was checked against the real
-filing's Item 1.01 text to see whether that term's *topic* was actually
-disclosed. This is machine learning in the sense of learning a pattern from
-data — just an explicit, inspectable rubric suited to small-N, rather than
-opaque weight updates.
+**Materiality rubric (Item 1.01) — a company-neutral, data-derived guide to *what is
+treated as material*, not just how it's phrased.** Matching tone isn't enough: real filings
+make deliberate *inclusion/omission* choices (governing law is essentially never called out;
+price almost always is) that a generic checklist doesn't capture. An earlier rubric was
+derived from **17 of Richtech's own** Item 1.01 filings — a single-issuer bias unfit for a
+multi-company product. It was **replaced with a market-norm rubric measured across the ~90-issuer
+public-EDGAR corpus** (`training/build_general_rubric.py`, a deterministic, deal-type-aware
+keyword scan — no LLM), so the bands reflect general practice rather than one filer's habits.
 
-Aggregated across all 17 pairs, terms fall into three bands:
+Across **245 real Item 1.01 disclosures (~90 issuers)**, terms fall into three bands:
 
-| Band | Terms (with hit rate) |
+| Band | Terms (with disclosure rate) |
 |------|------------------------|
-| **Always** disclosed when present | Nature of transaction (17/17), asset description incl. size/location (14/14), maturity/term (8/8), redemption rights (3/3), earnest money/deposit (2/2), parties (22/23), effective date (21/22) |
-| **Usually** disclosed, deal-type dependent | Purchase price (16/20), financing amount (5/6), conversion terms (7/8), interest rate (4/6, always for notes), closing timing/conditions (~50%, high for real estate, low for services) |
-| **Rarely or never** disclosed as an individual term | Governing law (0/10), assignment/change-of-control (0/4), limitation of liability (1/6), dispute resolution (1/6), use of proceeds (0/2) — these are folded into a boilerplate catch-all instead |
+| **Always** disclose when present | Price / principal (89%) |
+| **Usually** disclose, deal-type dependent | Term (60%), asset description (55%), reps (53%, ~87% for equity deals), closing timing (46%, ~68% for equity), conversion (37%), interest rate (~58% for debt); earnest money "include when present" |
+| **Rarely / never** as an individual term | Governing law (0/245), dispute resolution (0.8%), confidentiality (6%), assignment (10%) — folded into a boilerplate "customary provisions" catch-all instead |
 
-This is encoded directly in `draft.ITEM_CHECKLISTS["1.01"]` (a 23-field checklist
-covering every deal type Item 1.01 spans — financings, real estate, notes,
-services, M&A) and `draft.ITEM_RULES["1.01"]` (an explicit ALWAYS/USUALLY/
-RARELY-OR-NEVER rubric, each band annotated with its real hit-rate, injected
-into the drafting prompt alongside the mandatory (a)-(d) SEC requirements — with
-an explicit instruction that when the rubric conflicts with clear case-by-case
-materiality, prefer *including* the term, since omission is the greater legal
-risk). One category of gap is fundamental and not fixable by any
-document-grounded approach: business-context narrative that isn't in the
-contract at all (e.g. *why* a property matters strategically) — RAG can only
-disclose what the source document contains.
+This is encoded in `draft.ITEM_CHECKLISTS["1.01"]` (a 23-field checklist covering every deal
+type Item 1.01 spans — financings, real estate, notes, services, M&A) and
+`draft.ITEM_RULES["1.01"]` (the measured ALWAYS/USUALLY/RARELY bands + the general SEC (a)-(d)
+requirements, with an instruction to prefer *including* a term when materiality is arguable,
+since omission is the greater legal risk). One gap is fundamental to any document-grounded
+approach: business-context narrative that isn't in the source at all (e.g. *why* a property
+matters strategically) — see the Business/strategic-context box above.
 
-**Held-out validation.** The same real-estate Purchase & Sale Agreement used in
-the original held-out test (its own real 8-K excluded from the precedent pool)
-was re-drafted after the rubric change. All three previously-missing facts now
-appear correctly — building size (79,325 sq ft), earnest money ($600,000), and
-closing timing (15 days post-inspection) — while boilerplate terms (governing
-law, assignment, dispute resolution) are correctly folded into the catch-all
-rather than enumerated. All five SEC compliance checks pass: (a) date, (b)
-parties, (c) material-relationship statement, (d) material terms, and the
-exhibit-incorporation qualifier.
+**Registrant profile is a per-deployment input, not hardcoded.** The 8-K cover/signature
+identifiers (name, state, Commission File No., EIN, address, phone, securities table, EGC flag,
+signer) come from a `registrant.json` (`export.load_registrant`, path via `REGISTRANT_FILE`),
+editable in-browser via the admin **Company** tab (`GET/PUT /api/registrant`) and read at render
+time — a new customer or a changed address is a config edit, no code change.
+
+**Held-out validation.** A real-estate Purchase & Sale Agreement (its own real 8-K excluded)
+re-drafts guardrail-CLEAN with every figure grounded — building size (79,325 sq ft), earnest
+money ($600,000), price ($21,180,000), closing timing — while boilerplate terms (governing law,
+assignment, dispute resolution) fold into the catch-all rather than being enumerated. All SEC
+compliance checks pass: (a) date, (b) parties, (c) material-relationship statement, (d) material
+terms, and the exhibit-incorporation qualifier (rendered exactly once).
 
 **Three real held-out tests done** (a real contract with its own real resulting
 8-K excluded from its precedent pool, then compared against what was actually
@@ -412,26 +432,27 @@ source document was on hand); they draft the same way once a real document is
 supplied. **Next: a lawyer reviews the drafts** — this stays an experiment
 requiring sign-off, and RAG-grounded, never fine-tuned.
 
-### 8-K style adapter (`training/`) — trained, validated, DEPLOYED
+### Retired: fine-tuned adapter / delexicalized variant (`training/`, history only)
 
-A **LoRA adapter** teaches the base model (`Qwen3.6-35B-A3B`) 8-K *style, structure,
-and materiality selectivity* — never facts, which always stay RAG-grounded + guarded.
-`training/` is a self-contained package (built/trained on an RTX 6000, not this host):
-a ~2,174-pair dataset from **public** EDGAR filings of ~90 companies (`{instruction,
-source document, real Item disclosure}`), the LLaMA-Factory configs, and an A/B eval.
-
-**A/B (held-out companies, adapter off vs on): ROUGE-L 0.246→0.464, number-recall
-0.577→0.675, output tightened 2430→1098 chars** — clear win on style; the base rambles
-and leaks `<think>`. Trained as bf16 LoRA (r32/α64, "safe" target set; `lora_target=all`
-collapses this hybrid model's SSM/expert-gate — do NOT use). A data-clean **v3 did not
-beat v2** and confirmed fabrication is structural, not data-fixable → **v2 is final**.
-
-**Deployed on Thor (RTX-free):** the merged model, quantized to **NVFP4**, serves via a
-vLLM Docker container (`lawrag-llm-8k`, :8012) with a tight chat template that forces
-`<think>` off. It is used for *style*; the **fact guardrail** (above) enforces facts.
-This is the first block of a "shared base + one adapter per filing type" design
-(8-K done; S-8 / 10-K later). Full deploy recipe + gotchas: `training/DEPLOY_THOR.md`.
-Every draft still requires lawyer sign-off.
+A **LoRA style adapter** (v2) and a later **delexicalized** variant (v4/v5) were built and
+validated on an RTX 6000, then **retired** — kept in `training/` for history, not on the
+serving path. The lesson defines the current architecture:
+- The v2 adapter won on *style* (A/B on held-out companies: ROUGE-L 0.246→0.464, output
+  tightened 2430→1098 chars) but **fabricated figures** on number-dense disclosures — the exact
+  compliance red line. A data-clean **v3 did not beat v2**, confirming fabrication is *structural*
+  to using generative weights for facts, not a data-volume problem.
+- The **delexicalized** idea (train on typed placeholders, backfill real values deterministically)
+  worked for transactional Items (2.03/3.02 ~78% groundable) but not the narrative **1.01/5.02
+  core** (~6% / 0%), where disclosures paraphrase and pull facts from outside the paired exhibit.
+  Widening the training window was measured to buy only ~+5 pts — so long-context (ZeRO-3)
+  training was ruled out.
+- **Conclusion:** facts must live in extraction + guardrail, never in weights. Style is obtainable
+  *without* fine-tuning — deterministic EDGAR-faithful export (structure) + prompt/rubric (tone) +
+  planned facts-stripped few-shot from the customer's own filings. Production runs the **plain base
+  model**; the design is still "shared base per filing type" (8-K done; S-8 / 10-K later). The
+  full rationale is in `8K_DRAFTING_FINDINGS_REPORT.md`; the retired training package and RTX
+  recipe are in `training/` (`DEPLOY_THOR.md`, `DELEX_V5_FINDINGS.md`). Every draft still requires
+  lawyer sign-off.
 
 ## Layout
 
@@ -450,8 +471,10 @@ lawrag/
   metadata.py   auto-extract doc_type/title/parties/client/date(/filing_item) at ingest
   export.py     batch DD export to Excel (matrix) + Word (memo); 8-K draft export to Word/PDF
   auth.py       users, per-client permissions, sessions, audit (ethical walls)
-  draft.py      experimental: draft an 8-K Item disclosure grounded in a contract's
-                extracted facts, using same-Item precedents as style reference only
+  draft.py      experimental: draft 8-K Item disclosure(s) grounded in the source
+                document(s) — extraction + code generation, figure-lock, narrative audit,
+                auto-Item detection, multi-document routing (draft_filing)
+  guardrail.py  deterministic fact-reconciliation (RED blocks fabrication) — no DB/retrieval
   generations.py  history of AI-generated documents (currently 8-K drafts), client-scoped
   api.py        FastAPI backend (login/stats/search/summarize/ingest/export) + serves web/
 web/            local web UI (index.html, style.css, app.js) — no external assets
@@ -485,12 +508,15 @@ data/sample/    synthetic test documents
   (keyed by hash, gitignored) and served back via an access-scoped download link.
 - **Phase 1.5 / next:** OCR for scanned PDFs; tie extraction citations to ingested
   chunk pages; TLS/SSO hardening; deployment auto-start.
-- **Phase 3 (drafting, experiment started):** 8-K Item 1.01 drafting grounded in
-  contract facts + same-Item precedents (`lawrag/draft.py`), precedent library now
-  30 of Richtech's real 8-Ks from SEC EDGAR — pending a real contract paired with
-  the 8-K it triggered for the actual quality comparison. Still RAG, not fine-tuning
-  — see rationale above and in project memory. LoRA remains reserved for house
-  style only, never facts.
+- **Phase 3 (drafting, experiment — architecture SETTLED):** 8-K drafting grounded in the
+  source document(s) on the **plain base model** (`lawrag/draft.py`): Item-specific extraction
+  + repair, code generation with figure-lock (`mode="hybrid"` default), numeric guardrail +
+  narrative audit, company-neutral data-derived materiality rubric, auto-Item detection,
+  multi-document filing (contract + press release → merged exhibits), editable registrant
+  profile. Fine-tuning (adapter/delex) was tried and **retired** — facts stay in extraction +
+  guardrail, never in weights. **Next (no training):** per-customer tone via facts-stripped
+  few-shot from the customer's own filings; deeper extraction; offering-specific exhibits
+  (5.1/23.1) as reviewer supplements. Every draft requires lawyer sign-off.
 
 ## Privacy notes
 

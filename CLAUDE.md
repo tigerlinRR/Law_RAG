@@ -34,5 +34,8 @@ Read these first on every session (they carry the state across cleared chats):
   "CURRENT STATE" for the live picture; `8K_DRAFTING_FINDINGS_REPORT.md` for the full rationale.
 - After editing `lawrag/*.py`: restart the web server and verify with a real HTTP
   request (no hot-reload).
+- **Keep the FOUR docs in lockstep** — in the SAME session as any code/architecture change,
+  update ALL of: `progress.md`, `CLAUDE.md`, `README.md`, and `README.zh-CN.md` (keep the two
+  READMEs mirrored; push only the English `README.md` to GitHub). Don't let them drift.
 
 See `progress.md` for everything else.
