@@ -495,6 +495,26 @@ $21.18M, 79,325 sq ft; guardrail CLEAN, near-publishable). Found + fixed three d
   extraction already does. Verified: clean 3-sentence summary, no reasoning.
 Server restarted + HTTP-verified after the `draft.py`/`summarize.py` edits.
 
+## Fact->source trace false-UNVERIFIED fixes (2026-07-21)
+Reviewing the same PSA's Review pack, the "Fact -> source trace" showed 3 red ⚠ UNVERIFIED rows
+that were NOT real problems (guardrail was CLEAN). Root-caused + fixed all three:
+- **Elided quotes** (`summarize.verify_quote`): the model quotes non-contiguous language joined
+  by an ellipsis ("A ... B") or with a trailing "...". The verbatim substring check failed on
+  these, showing genuine facts (the 79,325 sq ft building; the termination right) as UNVERIFIED.
+  Fix: if the whole-quote check fails, split on `...`/`…` and accept iff EVERY segment appears
+  verbatim in the source in left-to-right order (the elided middle is what "..." denotes). Each
+  segment must still match verbatim, so a paraphrase or a fabricated segment still FAILS (tested).
+- **Boilerplate in the trace** (`draft._TRACE_BOILERPLATE`, applied in `draft_8k` + api
+  `_recompute_verification`): the model lists the (c) material-relationship statement / the
+  exhibit qualifier in `facts_used` using their OWN text as the quote, so they can never verify
+  against the contract → a misleading red row. These are required legal assertions, not
+  source-grounded facts (already covered by the SEC-requirement checks), so they're dropped from
+  the trace.
+- **Reverify parity:** `_recompute_verification` now also refreshes the trace (same boilerplate
+  drop + ellipsis-aware re-verify), so an edit/supplement can't leave it stale. Verified E2E via
+  the reverify path on the stored PSA: 8 rows/3 UNVERIFIED -> 7 rows/0 UNVERIFIED, guardrail clean.
+Server restarted + HTTP health-checked after the `draft.py`/`summarize.py`/`api.py` edits.
+
 ## delex fixes + corpus filter shipped — delex fits 2.03/3.02, NOT the 1.01 core (2026-07-16)
 Did the Jetson-side work (no RTX needed): fixed delex quality + built the groundability
 filter. Both are in the repo (pushed). **RTX handoff (tables + commands): `training/DELEX_V5_FINDINGS.md`.**

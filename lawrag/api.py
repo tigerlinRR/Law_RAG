@@ -27,8 +27,9 @@ from decimal import Decimal
 from . import auth, clients, db, export, generations, guardrail
 from .config import ROOT
 from .draft import (ITEM_TITLES, _FIGURE_PLACEHOLDER, _FORWARD_LOOKING_STATEMENTS,
-                    _compliance_flags, _narrative_flags, _needs_forward_looking_statements,
-                    add_business_context, detect_items, draft_8k, draft_filing)
+                    _TRACE_BOILERPLATE, _compliance_flags, _narrative_flags,
+                    _needs_forward_looking_statements, add_business_context, detect_items,
+                    draft_8k, draft_filing, verify_quote)
 from .ingest import DocMeta, ingest_file
 from .parsers import NeedsOCR
 from .retrieve import Filters, search
@@ -328,6 +329,17 @@ def _recompute_verification(result: dict) -> None:
         if f.get("source") == "business_context":
             evidence += f"\nReviewer business context: {f.get('fact', '')}"
     result["_narrative_flags"] = _narrative_flags(target, evidence)
+    # Refresh the fact->source trace with the same rules draft_8k uses: drop boilerplate
+    # assertions and re-run quote verification (ellipsis-aware), so an edit/supplement can't
+    # leave the trace stale or showing a misleading UNVERIFIED.
+    kept = []
+    for f in result.get("facts_used", []):
+        if _TRACE_BOILERPLATE.search(f.get("fact", "") + " " + f.get("source_quote", "")):
+            continue
+        if f.get("source") != "business_context":
+            f["verified"] = verify_quote(f.get("source_quote", ""), src)
+        kept.append(f)
+    result["facts_used"] = kept
     # Unfilled placeholders still count as "to fill" (a placeholder isn't a figure the
     # guardrail flags, but the reviewer must still resolve it).
     result["_blanked_figures"] = [_FIGURE_PLACEHOLDER] * target.count(_FIGURE_PLACEHOLDER)

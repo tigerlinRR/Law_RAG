@@ -102,7 +102,25 @@ def verify_quote(quote: str, source_text: str) -> bool:
     if not quote or not quote.strip():
         return False
     norm = lambda s: " ".join(s.split())
-    return norm(quote) in norm(source_text)
+    nsrc = norm(source_text)
+    if norm(quote) in nsrc:
+        return True
+    # A quote may elide non-contiguous spans with an ellipsis ("A ... B") — a legitimate
+    # quoting convention the model uses when the relevant language spans a gap. Accept it
+    # iff EVERY segment appears verbatim in the source in left-to-right order (the elided
+    # middle is exactly what "..." denotes). Each segment must still match verbatim, so this
+    # never grounds a paraphrase — it only bridges an omission. Without this, genuine facts
+    # (e.g. a termination right quoted with an internal "...") show a false ⚠ UNVERIFIED.
+    segs = [norm(s) for s in re.split(r"\s*(?:\.{3}|…)\s*", quote) if s.strip()]
+    if not segs:
+        return False
+    pos = 0
+    for seg in segs:
+        i = nsrc.find(seg, pos)
+        if i < 0:
+            return False
+        pos = i + len(seg)
+    return True
 
 
 def _user_prompt(text: str, checklist: list[str]) -> str:

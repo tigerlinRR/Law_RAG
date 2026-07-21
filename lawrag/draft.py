@@ -663,6 +663,15 @@ _NARRATIVE_SKIP = re.compile(
     r"forward-looking statements|incorporated herein by reference|Exhibit \d|"
     r"\bentered into\b|customary representations|other customary|furnished as", re.I)
 
+# Pure boilerplate legal assertions (the (c) material-relationship statement, the exhibit
+# qualifier) that the model sometimes lists in facts_used using their OWN text as the quote.
+# They are required statements, not source-grounded facts, so verifying them against the
+# contract yields a misleading red "UNVERIFIED" in the fact->source trace. They are covered
+# by the SEC-requirement checks instead, so drop them from the trace.
+_TRACE_BOILERPLATE = re.compile(
+    r"no material relationship between|does not purport to be complete|"
+    r"qualified in (?:its )?entirety", re.I)
+
 _NARRATIVE_SCHEMA = {
     "type": "object",
     "properties": {"unsupported": {
@@ -985,8 +994,13 @@ def draft_8k(
     # in-app (POST /reverify) without re-parsing the contract.
     result["_source_text"] = full_text
     result["_derived_values"] = [[str(v), d] for v, d in review.get("_derived", [])]
+    kept = []
     for f in result.get("facts_used", []):
+        if _TRACE_BOILERPLATE.search(f.get("fact", "") + " " + f.get("source_quote", "")):
+            continue  # boilerplate assertion — not a source-grounded fact (see _TRACE_BOILERPLATE)
         f["verified"] = verify_quote(f.get("source_quote", ""), full_text)
+        kept.append(f)
+    result["facts_used"] = kept
     result["_source_contract"] = Path(contract_path).name
     result["_doc_type"] = review.get("doc_type", "")
     result["_precedents_used"] = precedent_citations
