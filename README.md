@@ -278,7 +278,13 @@ pre-checked — and the user routes each document to the Item(s) it covers (`rou
 Documents are numbered by role — agreements/instruments → 10.1, 10.2, …; press releases →
 99.1, 99.2, … — and the **Item 9.01 exhibit index is built from the actual documents supplied**
 (each named specifically, e.g. "Registration Rights Agreement") in SEC exhibit-number order + the
-104 cover-page XBRL. Every Item runs the numeric guardrail + narrative audit against *its* source;
+104 cover-page XBRL. A supplied document's number is taken from the UI (or inferred from its
+filename, e.g. `…EX-4.1…`). **Index-only exhibits** — ones a filing *lists* in Item 9.01 but does
+not draft narrative from (securities instruments **EX-4.x** warrants, a legal opinion **EX-5.1**, a
+consent **EX-23.1**) — are placed in the index by their number with a specific description read
+from the document (a "FORM OF …" heading → "Form of Common Warrant") or a type default, without
+being treated as a drafting source. So the tool accepts an arbitrary exhibit set
+(1.x/4.x/5.x/10.x/23.x/99.x): it drafts from the contracts and press releases and lists the rest. Every Item runs the numeric guardrail + narrative audit against *its* source;
 all safety signals merge to the filing level. `.txt` input is supported (press releases are often
 plain text). *(Registered-offering facts that live outside the agreement — share count, exemption,
 net proceeds, placement agent — come from the press release / prospectus or a reviewer supplement,

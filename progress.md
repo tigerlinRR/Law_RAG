@@ -515,6 +515,27 @@ that were NOT real problems (guardrail was CLEAN). Root-caused + fixed all three
   the reverify path on the stored PSA: 8 rows/3 UNVERIFIED -> 7 rows/0 UNVERIFIED, guardrail clean.
 Server restarted + HTTP health-checked after the `draft.py`/`summarize.py`/`api.py` edits.
 
+## Index-only exhibits (4.x / 5.1 / 23.1) — full exhibit taxonomy (2026-07-22)
+Generalized beyond contracts(10.x)+press-releases(99.x): a real offering 8-K also carries
+exhibits it LISTS in Item 9.01 but does NOT draft narrative from — securities instruments
+(EX-4.x warrants), a legal opinion (EX-5.1), a consent (EX-23.1). Added the exhibit-type/role
+layer so `draft_filing` handles ANY exhibit combination, not just the drafting sources:
+- **`_exhibit_numbers(sources, routing, explicit)`**: every source doc's number, priority
+  explicit (UI) > filename (`_infer_exhibit_no`, e.g. `…EX-4.1…`→"4.1") > role-based auto.
+- **Index-only docs** (in `sources`, not in any `routing` list) are added to the 9.01 index by
+  their number + a specific description (`_exhibit_description` → `_doc_title` reads a "FORM OF X"
+  heading → "Form of Common Warrant"; else a type default: 4.x "Form of Warrant", 5.1 "Opinion of
+  Counsel", 23.1 "Consent of Counsel"). They are NOT drafted from.
+- `draft_filing` gained an optional `exhibits` param (path→number) for the future upload UI.
+- **Verified** (index assembly, no LLM) on the real 2024-09-05 warrants offering (076143): SPA +
+  3 warrants + 2 press releases → index **4.1 Form of Pre-Funded Warrant / 4.2 Form of Common
+  Warrant / 4.3 Form of Placement Agent Warrant / 10.1 / 99.1 / 99.2 / 104** — the "Form of …"
+  descriptions match the real filing verbatim (read from each warrant's heading). Numeric SEC order
+  (4.x before 10.x).
+- Net: the tool now takes an arbitrary exhibit set — 1.x/4.x/5.x/10.x/23.x/99.x — drafts from the
+  contracts (10.x/1.x) and press releases (99.x), and lists the rest in Item 9.01. Warrant TERMS
+  still come from the agreement (SPA), per real-filing practice, not from the 4.x form.
+
 ## Multi-document-per-Item drafting + full exhibit index (2026-07-22)
 The gap two real-filing comparisons exposed: a filing bundles several documents PER Item
 (Item 1.01 from a Securities Purchase Agreement AND a Registration Rights Agreement; Item 8.01

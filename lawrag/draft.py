@@ -1168,27 +1168,80 @@ def _build_exhibits(entries: list[dict]) -> list[dict]:
     return ex
 
 
-def _assign_exhibit_nos(routing: dict[str, list]) -> dict:
-    """Assign each source document an exhibit number by role and first-seen order: contract-
-    family documents -> 10.1, 10.2, …; news/press-release documents -> 99.1, 99.2, …. A doc
-    that feeds several Items keeps ONE number."""
-    contract_docs, news_docs = [], []
-    for it in routing:
-        bucket = news_docs if it in NEWS_ITEMS else contract_docs
-        for p in routing[it]:
-            if p not in bucket:
-                bucket.append(p)
-    exmap: dict = {}
-    for i, p in enumerate(contract_docs, 1):
-        exmap[p] = f"10.{i}"
-    for i, p in enumerate(news_docs, 1):
-        exmap[p] = f"99.{i}"
-    return exmap
+_EXHIBIT_NO_RE = re.compile(r"ex[-_ ]?(\d+)[-.](\d+)", re.I)  # EX-10.1, ex10-1, ex99-2, EX-4.1
+_FORM_OF_RE = re.compile(r"\bFORM OF ([A-Z][A-Z0-9 ,&/\-]{3,60})")
+# Exhibit families that a real 8-K LISTS in Item 9.01 but does NOT draft narrative from — the
+# tool includes them in the exhibit index only. 1.x (underwriting) / 10.x (contracts) drive
+# contract Items; 99.x drive news Items; everything else here is index-only.
+_INDEX_ONLY_TYPES = {"3", "4", "5", "23"}
+
+
+def _infer_exhibit_no(path: "str | Path") -> str | None:
+    """The exhibit number encoded in a source filename (e.g. '...EX-4.1...', 'ex99-2') -> '4.1'
+    / '99.2'. This is how the tool learns a supplied document's real exhibit number; the future
+    upload UI supplies it explicitly instead. Returns None if absent."""
+    m = _EXHIBIT_NO_RE.search(Path(path).name)
+    return f"{m.group(1)}.{m.group(2)}" if m else None
+
+
+def _doc_title(path: "str | Path") -> str | None:
+    """A specific description for an index-only exhibit, read from the document head — a
+    'FORM OF X' heading (warrants, forms of agreement) becomes 'Form of X'. None if not found."""
+    try:
+        from .parsers import parse as _parse
+        head = "\n".join(b.text for b in _parse(Path(path)))[:2000]
+    except Exception:
+        return None
+    m = _FORM_OF_RE.search(head)
+    if m:
+        return "Form of " + m.group(1).strip(" ,").title()
+    return None
+
+
+def _exhibit_description(path: "str | Path", number: str) -> str:
+    """Item 9.01 description for an index-only exhibit (not drafted from) — a specific title
+    read from the document if available, else a type-based default keyed on the exhibit family."""
+    title = _doc_title(path)
+    if title:
+        return title
+    typ = number.split(".")[0]
+    return {"1": "Underwriting Agreement", "3": "Exhibit", "4": "Form of Warrant",
+            "5": "Opinion of Counsel", "23": "Consent of Counsel"}.get(typ, "Exhibit")
+
+
+def _exhibit_numbers(sources: list, routing: dict[str, list],
+                     explicit: dict | None = None) -> dict:
+    """Every source document's exhibit number. Priority: an explicit number (from the UI) >
+    the number encoded in the filename (`_infer_exhibit_no`) > a role-based auto-assignment
+    (contract Items -> the next free 10.x, news Items -> the next free 99.x) for a routed
+    document whose number couldn't otherwise be determined."""
+    explicit = explicit or {}
+    nums: dict = {}
+    for p in sources:
+        n = explicit.get(str(p)) or explicit.get(p) or _infer_exhibit_no(p)
+        if n:
+            nums[p] = n
+    used = set(nums.values())
+
+    def _next_free(prefix: str) -> str:
+        i = 1
+        while f"{prefix}.{i}" in used:
+            i += 1
+        used.add(f"{prefix}.{i}")
+        return f"{prefix}.{i}"
+
+    for it, docs in routing.items():
+        prefix = "99" if it in NEWS_ITEMS else "10"
+        for d in docs:
+            if d not in nums:
+                nums[d] = _next_free(prefix)
+    return nums
 
 
 def draft_filing(sources: "str | Path | list", items: list[str],
                  allowed_clients: list[str] | None = None,
-                 routing: dict[str, object] | None = None) -> dict:
+                 routing: dict[str, object] | None = None,
+                 exhibits: dict | None = None) -> dict:
     """Draft a multi-Item, multi-DOCUMENT 8-K from one or more source documents.
 
     `sources` is a single path or a list (contract + registration rights agreement + press
@@ -1212,7 +1265,7 @@ def draft_filing(sources: "str | Path | list", items: list[str],
                    for it, v in routing.items()}
     else:
         routing = {it: [p] for it, p in _route_items(sources, items).items()}
-    exmap = _assign_exhibit_nos(routing)
+    exmap = _exhibit_numbers(sources, routing, exhibits)
 
     sections: list[dict] = []
     substantive: list[tuple[str, dict]] = []
@@ -1265,6 +1318,17 @@ def draft_filing(sources: "str | Path | list", items: list[str],
     result["_guardrail"] = {"verdict": "blocked" if blocked else "clean", "items": g_items}
     result["_narrative_flags"] = nf
     result["_items"] = sections
+    # Index-only exhibits: documents supplied but NOT drafted from (securities instruments
+    # 4.x, a legal opinion 5.1, a consent 23.1, …). A real 8-K LISTS these in Item 9.01 but
+    # writes no narrative from them — add them to the index by their number + a specific
+    # description, so the exhibit index matches the full filing.
+    routed = {d for docs in routing.values() for d in docs}
+    for d in sources:
+        if d in routed:
+            continue
+        num = exmap.get(d)
+        if num:
+            exhibit_entries.append({"number": num, "description": _exhibit_description(d, num)})
     result["_exhibits"] = _build_exhibits(exhibit_entries)
     result["item"] = primary_item
     result["item_title"] = ITEM_TITLES.get(primary_item, "")
