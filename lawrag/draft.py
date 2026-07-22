@@ -806,9 +806,14 @@ _ITEM_DETECT_SYSTEM = (
     "substantive Item (1.01/2.03/3.02/2.01) is triggered by the underlying AGREEMENT/INSTRUMENT, "
     "NOT by a press release about it. So: an agreement/contract -> its substantive Item; a press "
     "release -> 8.01. Be CONSERVATIVE: suggest an Item only when the document clearly triggers "
-    "it, with a one-line reason. Most agreements trigger 1.01; a note also triggers 2.03; a "
-    "private stock sale also triggers 3.02. If unsure, suggest only 1.01. Never invent an Item "
-    "outside this list.")
+    "it, with a one-line reason.\n"
+    "IMPORTANT — a signed agreement ALWAYS triggers Item 1.01 as its PRIMARY Item (it is a "
+    "material definitive agreement). Any additional Item is SECONDARY, never a replacement: a "
+    "note/loan is 1.01 AND 2.03; a private/unregistered securities sale (securities purchase, "
+    "subscription, or registration rights agreement) is 1.01 AND 3.02. NEVER return 2.03 or 3.02 "
+    "for an agreement without ALSO returning 1.01. Item 3.02/2.03 alone (no 1.01) is only for a "
+    "standalone instrument that is not itself the definitive agreement. If unsure, return 1.01. "
+    "Never invent an Item outside this list.")
 
 
 _NEWS_SCHEMA = {"type": "object",
@@ -1265,7 +1270,22 @@ def draft_filing(sources: "str | Path | list", items: list[str],
                    for it, v in routing.items()}
     else:
         routing = {it: [p] for it, p in _route_items(sources, items).items()}
+    # A document assigned to a CROSS-REFERENCE Item (e.g. 3.02, which incorporates 1.01 by
+    # reference and is not drafted from its own document) belongs in that Item's substantive
+    # companion — otherwise the document is dropped entirely (neither drafted nor indexed).
+    # Redirect it so e.g. a Securities Purchase Agreement tagged 3.02 still lands under 1.01.
+    for it in list(routing):
+        comp = _cross_ref_companion(it, items)
+        if comp:
+            routing.setdefault(comp, [])
+            for d in routing.pop(it):
+                if d not in routing[comp]:
+                    routing[comp].append(d)
     exmap = _exhibit_numbers(sources, routing, exhibits)
+    # Draft each Item's documents in exhibit-number order (10.1 before 10.2, 99.1 before 99.2)
+    # so the primary agreement leads the disclosure, matching real-filing order.
+    for it in routing:
+        routing[it].sort(key=lambda d: _exhibit_sort_key(exmap.get(d, "99.99")))
 
     sections: list[dict] = []
     substantive: list[tuple[str, dict]] = []

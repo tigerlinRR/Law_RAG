@@ -515,6 +515,24 @@ that were NOT real problems (guardrail was CLEAN). Root-caused + fixed all three
   the reverify path on the stored PSA: 8 rows/3 UNVERIFIED -> 7 rows/0 UNVERIFIED, guardrail clean.
 Server restarted + HTTP health-checked after the `draft.py`/`summarize.py`/`api.py` edits.
 
+## Two fixes: agreement→1.01 detection + cross-ref docs no longer dropped (2026-07-22)
+Live web test of the 2026-01-30 private placement with ALL FOUR docs uploaded still produced a
+draft MISSING the SPA (Item 1.01 = RRA only; exhibit index lacked 10.1). Root-caused two bugs:
+- **Detection mis-routed the SPA to 3.02 ONLY.** `detect_items` suggested Item 3.02 (unregistered
+  sale) for the Securities Purchase Agreement but NOT 1.01, so the user's confirmed assignment put
+  the SPA on 3.02. Fixed `_ITEM_DETECT_SYSTEM`: a signed agreement ALWAYS triggers 1.01 as its
+  PRIMARY Item; 2.03/3.02 are SECONDARY, never a replacement — never return 3.02/2.03 for an
+  agreement without also returning 1.01. Verified: the SPA now detects ["1.01","3.02"].
+- **A document routed to a CROSS-REFERENCE Item was dropped entirely.** 3.02 incorporates 1.01 by
+  reference and is not drafted from its own document, so the SPA (routed to 3.02) was neither
+  drafted into 1.01 nor added to the exhibit index — it vanished. Fixed in `draft_filing`: before
+  drafting, a document assigned to a cross-ref Item is redirected into that Item's substantive
+  companion (SPA tagged 3.02 → lands under 1.01). Also sort each Item's docs by exhibit number so
+  the primary agreement (10.1) leads the disclosure.
+- **Verified E2E** reproducing the exact scenario (RRA→1.01, SPA→3.02, PRs→8.01): Item 1.01 now
+  leads with the SPA ($38,675,000/$4.55) + the RRA, exhibit index 10.1/10.2/99.1/99.2/104,
+  guardrail CLEAN — matching the real filing. Server restarted + HTTP-verified.
+
 ## Index-only exhibits (4.x / 5.1 / 23.1) — full exhibit taxonomy (2026-07-22)
 Generalized beyond contracts(10.x)+press-releases(99.x): a real offering 8-K also carries
 exhibits it LISTS in Item 9.01 but does NOT draft narrative from — securities instruments

@@ -256,9 +256,12 @@ over the document head, `POST /api/detect-items`) suggests which 8-K Item(s) the
 triggers, with a one-line reason, and the Generate tab **pre-checks the suggestion for the
 user to confirm or adjust** (suggestion-only, never auto-committed). It classifies by
 *document role*: a press release → 8.01 (or 7.01), **never** the substantive Item it merely
-discusses; and it is conservative about 2.01 — it will not suggest "completion" for a
-purchase agreement that is only signed and will close later (a known failure mode of some
-cloud rivals).
+discusses; a signed agreement → **1.01 (primary)** plus any secondary Item (a note also → 2.03,
+a private stock sale also → 3.02), never a secondary Item *alone*; and it is conservative about
+2.01 — it will not suggest "completion" for a purchase agreement that is only signed and will
+close later (a known failure mode of some cloud rivals). A document a reviewer nonetheless routes
+to a cross-reference Item (e.g. 3.02) is redirected into that Item's substantive companion (1.01)
+so it is still drafted and indexed, never dropped.
 
 **Multiple documents per Item, multiple Items in one filing.** Real 8-Ks bundle several Items
 and several documents — often **more than one document per Item** (Item 1.01 from a Securities
