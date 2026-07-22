@@ -515,6 +515,19 @@ that were NOT real problems (guardrail was CLEAN). Root-caused + fixed all three
   the reverify path on the stored PSA: 8 rows/3 UNVERIFIED -> 7 rows/0 UNVERIFIED, guardrail clean.
 Server restarted + HTTP health-checked after the `draft.py`/`summarize.py`/`api.py` edits.
 
+## Full RR exhibit set downloaded for multi-exhibit testing (2026-07-22)
+For the testing/compare phase we replicate real Richtech filings from SEC (the eventual product
+lets users upload their own docs). Generalized the EX-99-only `download_rr_supplements.py` into
+**`scripts/download_rr_exhibits.py`** — fetches EVERY exhibit type across our reference 8-Ks and
+routes by role: agreements/instruments (EX-1.x, EX-4.x, EX-10.x) → `data/RR contracts/`;
+opinions/consents/news (EX-5.x, EX-23.x, EX-99.x) → `data/RR supplements/`. Accessions derived
+from the `data/RR 8-K/*.pdf` filenames; EDGAR fair-access (declared UA + rate limit); skips
+already-present curated files. Downloaded 15 new (skipped 24). Real Richtech exhibit landscape:
+EX-1.1 underwriting, EX-4.x securities instruments (warrants), EX-5.1 legal opinion, EX-10.x
+contracts, EX-99.1–99.5 press releases (NO 23.1 — those ride with S-1/S-3, not 8-Ks). Richest
+compare samples now complete on disk: **2024-09-05 (076143)** SPA+3 warrants+2 press releases;
+**2023-11-22 (089609)** underwriting+warrant+5 press releases; **2026-01-30 (009823)** SPA+RRA+2 PR.
+
 ## Business-context merge now syncs the per-Item sections (2026-07-21)
 Compared our draft of the EBS Rainbow PSA against the **real filed 8-K** (accession
 0001213900-26-041153). The only substantive gap was the real filing's forward-looking
