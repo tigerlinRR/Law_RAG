@@ -289,9 +289,10 @@ from the document (a "FORM OF …" heading → "Form of Common Warrant") or a ty
 being treated as a drafting source. So the tool accepts an arbitrary exhibit set
 (1.x/4.x/5.x/10.x/23.x/99.x): it drafts from the contracts and press releases and lists the rest. Every Item runs the numeric guardrail + narrative audit against *its* source;
 all safety signals merge to the filing level. `.txt` input is supported (press releases are often
-plain text). *(Registered-offering facts that live outside the agreement — share count, exemption,
-net proceeds, placement agent — come from the press release / prospectus or a reviewer supplement,
-not the "Form of" contract.)*
+plain text). A contract Item is also given the filing's **press-release text as related-filing
+context** and grounded against the contract *plus* that press release, so facts a "Form of"
+agreement omits but the press release states (share count, offering size, gross proceeds) can enter
+Item 1.01 as grounded facts — anything not in any filing document is still locked/flagged.
 
 ```bash
 # Tag historical 8-Ks with their Item number(s) at ingest (auto-detected, or manual

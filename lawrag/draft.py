@@ -617,19 +617,32 @@ def _facts_block(review: dict) -> str:
     return "\n".join(lines)
 
 
-def _user_prompt(item: str, item_title: str, review: dict, precedents: list[str]) -> str:
+def _user_prompt(item: str, item_title: str, review: dict, precedents: list[str],
+                 context_text: str = "") -> str:
     precedents_block = "\n\n---\n\n".join(precedents) if precedents else \
         "(no prior filing of this Item type found in the library — draft from the " \
         "contract facts alone, using standard 8-K disclosure conventions)"
     rules = ITEM_RULES.get(item, "(no item-specific requirements on file — apply "
                            "standard 8-K disclosure conventions)")
+    # Related filing documents (e.g. the press release announcing this transaction) carry
+    # material terms the "Form of" agreement omits — number of shares, aggregate offering
+    # size, exemption relied on, placement agent. They are part of THIS filing, so their facts
+    # are grounded; let the model fold them into the disclosure (facts only, in 8-K style).
+    context_block = ""
+    if context_text.strip():
+        context_block = (
+            f"\n\n=== RELATED FILING DOCUMENTS (same filing — e.g. the press release; you MAY "
+            f"incorporate material transaction facts stated here that the contract omits, such "
+            f"as the number of shares, aggregate offering size, exemption relied upon, and "
+            f"placement agent — as FACTS in neutral 8-K style, NOT by copying press-release or "
+            f"promotional phrasing) ===\n{context_text[:20000]}")
     return (
         f"=== TARGET: Item {item} — {item_title} ===\n\n"
         f"=== MANDATORY SEC DISCLOSURE REQUIREMENTS (your draft MUST satisfy all) ===\n"
         f"{rules}\n\n"
         f"=== FACTS EXTRACTED FROM THE SOURCE CONTRACT ===\n{_facts_block(review)}\n\n"
         f"=== PRIOR ITEM {item} FILINGS (structure/style reference ONLY — do not "
-        f"reuse their facts) ===\n{precedents_block}"
+        f"reuse their facts) ===\n{precedents_block}{context_block}"
     )
 
 
@@ -882,6 +895,7 @@ def draft_8k(
     exclude_document_ids: list[int] | None = None,
     mode: str = "hybrid",
     exhibit_no: str | None = None,
+    context_text: str = "",
 ) -> dict:
     """Draft an 8-K Item disclosure for `contract_path`, grounded in facts extracted
     from that contract.
@@ -957,7 +971,7 @@ def draft_8k(
             precedent_texts = ["\n".join(c.content for c in chs) for chs in precedent_docs]
             precedent_citations = [chs[0].citation() for chs in precedent_docs]
         result = llm.chat_json(
-            _SYSTEM, _user_prompt(item, item_title, review, precedent_texts),
+            _SYSTEM, _user_prompt(item, item_title, review, precedent_texts, context_text),
             DRAFT_SCHEMA, max_tokens=8192,
         )
     # Item/title are known inputs, not model output — set them deterministically
@@ -972,11 +986,16 @@ def draft_8k(
     if item in CONTRACT_ITEMS:  # news Items reference Exhibit 99.1, not the 10.1 qualifier
         disc = _ensure_exhibit_qualifier(disc, exhibit_no)
     full_text = review.get("_full_text", "")
+    # Ground against the source contract AND any related filing documents (press releases)
+    # whose facts the draft was allowed to incorporate — so a share count / offering size /
+    # exemption stated in the press release is treated as grounded, not blanked or flagged.
+    ground_text = full_text + (("\n\n=== RELATED FILING DOCUMENT ===\n" + context_text)
+                               if context_text.strip() else "")
     if mode == "hybrid":
         # HYBRID (default): keep the model's prose but HARD-LOCK figures — any number it
         # produced that isn't grounded in the source is blanked to a placeholder, so no
         # imagined figure survives. The reviewer then fills the placeholders.
-        disc, result["_blanked_figures"] = _lock_figures(disc, full_text, review.get("_derived"))
+        disc, result["_blanked_figures"] = _lock_figures(disc, ground_text, review.get("_derived"))
     result["disclosure"] = disc
     if _needs_forward_looking_statements(result["disclosure"]):
         result["_forward_looking_statements"] = _FORWARD_LOOKING_STATEMENTS
@@ -984,7 +1003,7 @@ def draft_8k(
     result["_repaired"] = review.get("_repaired")  # count of verify-gated 2nd-pass repairs
     # Fact-fidelity guardrail on the (figure-locked) disclosure.
     result["_guardrail"] = guardrail.reconcile(
-        result["disclosure"], full_text, derived=review.get("_derived"))
+        result["disclosure"], ground_text, derived=review.get("_derived"))
     # v4/delex: a placeholder v4 emitted that the source map lacked is a fact NOT in the
     # source -> BLOCK (composes with the reconciliation guardrail's RED logic).
     for ph in result.get("_backfill_missing") or []:
@@ -997,13 +1016,15 @@ def draft_8k(
     # Check against the extracted grounded facts (compact, complete) not the raw contract.
     if mode in ("hybrid", "llm"):
         result["_grounded_facts"] = _facts_block(review)
-        # Evidence = extracted clauses + the raw source, so a real fact the checklist happened
-        # to miss (but that IS in the document) is not falsely flagged as unsupported.
-        evidence = result["_grounded_facts"] + "\n\n=== SOURCE DOCUMENT ===\n" + full_text
+        # Evidence = extracted clauses + the raw source (+ related filing docs), so a real fact
+        # the checklist missed — or one the draft pulled from the press release — is not falsely
+        # flagged as unsupported.
+        evidence = result["_grounded_facts"] + "\n\n=== SOURCE DOCUMENT ===\n" + ground_text
         result["_narrative_flags"] = _narrative_flags(result["disclosure"], evidence)
     # Keep the source text + anchored derivations so an edited draft can be re-verified
-    # in-app (POST /reverify) without re-parsing the contract.
-    result["_source_text"] = full_text
+    # in-app (POST /reverify) without re-parsing the contract. Store the COMBINED grounding
+    # text so reverify grounds against the same source contract + related filing documents.
+    result["_source_text"] = ground_text
     result["_derived_values"] = [[str(v), d] for v, d in review.get("_derived", [])]
     kept = []
     for f in result.get("facts_used", []):
@@ -1287,6 +1308,19 @@ def draft_filing(sources: "str | Path | list", items: list[str],
     for it in routing:
         routing[it].sort(key=lambda d: _exhibit_sort_key(exmap.get(d, "99.99")))
 
+    # Related-filing context for contract Items: a press release announcing the transaction
+    # carries deal facts (share count, offering size, exemption, placement agent) the "Form of"
+    # agreement omits. Pass its text so the contract Item can incorporate those facts — grounded
+    # against it (same filing), so nothing is fabricated. News Items don't need this.
+    from .parsers import parse as _parse
+    news_docs = [d for it2 in items if it2 in NEWS_ITEMS for d in (routing.get(it2) or [])]
+    filing_context = ""
+    for d in news_docs:
+        try:
+            filing_context += "\n\n" + "\n".join(b.text for b in _parse(d))
+        except Exception:
+            pass
+
     sections: list[dict] = []
     substantive: list[tuple[str, dict]] = []
     exhibit_entries: list[dict] = []
@@ -1298,8 +1332,9 @@ def draft_filing(sources: "str | Path | list", items: list[str],
                              "disclosure": _cross_ref_text(it, comp), "cross_ref": True})
             continue
         docs = routing.get(it) or [sources[0]]
+        ctx = "" if it in NEWS_ITEMS else filing_context
         drafts = [draft_8k(d, item=it, allowed_clients=allowed_clients,
-                           exhibit_no=exmap.get(d)) for d in docs]
+                           exhibit_no=exmap.get(d), context_text=ctx) for d in docs]
         if it in NEWS_ITEMS:
             disclosure = "\n\n".join(r.get("disclosure", "") for r in drafts)
             for d, r in zip(docs, drafts):

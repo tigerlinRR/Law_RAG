@@ -515,6 +515,27 @@ that were NOT real problems (guardrail was CLEAN). Root-caused + fixed all three
   the reverify path on the stored PSA: 8 rows/3 UNVERIFIED -> 7 rows/0 UNVERIFIED, guardrail clean.
 Server restarted + HTTP health-checked after the `draft.py`/`summarize.py`/`api.py` edits.
 
+## Item 1.01 absorbs related-filing (press-release) facts (2026-07-22)
+The honest completeness gap for securities offerings: a contract Item drafted from the "Form of"
+agreement omits facts that live in the press release (share count, offering size, exemption,
+placement agent). Closed it SAFELY: in a multi-document filing, a contract Item's drafting is now
+given the filing's press-release text as **related-filing context** and grounded against the
+source contract + that press release combined — so a fact stated in the press release can enter
+Item 1.01 and is treated as grounded (not blanked, not RED), while anything NOT in any filing
+document is still locked/flagged.
+- `draft_8k(..., context_text="")` + `_user_prompt(..., context_text)`: the context is added to
+  the drafting prompt ("you MAY incorporate material transaction facts — share count, offering
+  size, exemption, placement agent — as FACTS in 8-K style, not press-release phrasing") and the
+  grounding text (`ground_text = source + context`) feeds `_lock_figures`, `guardrail.reconcile`,
+  the narrative-audit evidence, and stored `_source_text` (so reverify grounds the same way).
+- `draft_filing` passes the filing's news-document text as `context_text` to contract Items only.
+- **Verified E2E on the 2026-01-30 private placement:** Item 1.01 now states the **8,500,000
+  share count** and **~$38.7M gross proceeds** (were missing), RRA para enriched (closing date,
+  proceeds) — **guardrail CLEAN, 0 narrative flags, 0 blanked**. The model pulls in some context
+  facts conservatively (share count + proceeds yes; exemption + Rodman not this run) — safe by
+  design, not a regression. Prompt can be nudged harder if fuller inclusion is wanted.
+Server restarted + HTTP-verified after the `draft.py` edit.
+
 ## Two fixes: agreement→1.01 detection + cross-ref docs no longer dropped (2026-07-22)
 Live web test of the 2026-01-30 private placement with ALL FOUR docs uploaded still produced a
 draft MISSING the SPA (Item 1.01 = RRA only; exhibit index lacked 10.1). Root-caused two bugs:
