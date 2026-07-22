@@ -515,6 +515,39 @@ that were NOT real problems (guardrail was CLEAN). Root-caused + fixed all three
   the reverify path on the stored PSA: 8 rows/3 UNVERIFIED -> 7 rows/0 UNVERIFIED, guardrail clean.
 Server restarted + HTTP health-checked after the `draft.py`/`summarize.py`/`api.py` edits.
 
+## Multi-document-per-Item drafting + full exhibit index (2026-07-22)
+The gap two real-filing comparisons exposed: a filing bundles several documents PER Item
+(Item 1.01 from a Securities Purchase Agreement AND a Registration Rights Agreement; Item 8.01
+from two press releases) and a full 9.01 index (10.1, 10.2, 99.1, 99.2, 104) — but `draft_filing`
+was one-doc-per-Item and `_build_exhibits` hardcoded a single 10.1 + 99.1. Built the real use
+case ("I hand it the exhibit set, it drafts our 8-K"):
+- **`routing` is now `item -> path | list[path]`.** A contract Item drafts each agreement via
+  `draft_8k` (each guardrail-checked against its own source), then merges: the substantive bodies
+  are spliced (`_strip_closing`), followed by ONE (c) statement + ONE combined qualifier
+  (`_combined_qualifier`, plural: "descriptions of the X and Y … Exhibits 10.1 and 10.2"). A news
+  Item emits one paragraph per press release, each furnished as its own 99.x (`_draft_news` /
+  `draft_8k` now take `exhibit_no`; `_ensure_exhibit_qualifier` too).
+- **`_assign_exhibit_nos`**: contract-family docs → 10.1/10.2/…, news docs → 99.1/99.2/… by
+  first-seen order. **`_build_exhibits`** now lists the ACTUAL documents supplied (each with a
+  specific name via `_agreement_name`, e.g. "Registration Rights Agreement", not generic
+  "Agreement") in SEC exhibit-number order + 104.
+- **`_merge_item_drafts`**: unions every safety signal across an Item's documents (guardrail
+  items, narrative flags, blanked figures, facts, grounded facts, source text, derived values) so
+  nothing a reviewer needs is dropped. Filing-level guardrail + narrative flags aggregate across
+  all Items.
+- **`api.py` `/api/generate/8k`** accumulates `routing[item]` as a LIST (was overwriting → only the
+  last doc survived), so the web/upload path supports multi-doc-per-Item too.
+- **Verified E2E on the real 2026-01-30 private placement (009823):** {10.1 SPA + 10.2 RRA + 99.1 +
+  99.2} → Item 1.01 covers BOTH agreements (SPA terms + RRA shelf/liquidated-damages), 3.02
+  cross-refs 1.01, 8.01 has two paragraphs furnished 99.1 + 99.2, exhibit index 10.1/10.2/99.1/99.2/
+  104 — matches the real filing's structure; guardrail CLEAN, narrative 0.
+- **Honest residual (registered offerings):** 1.01 from the SPA *form* still omits facts that live
+  outside it (share count, exemption, net proceeds, placement agent) — those come from the press
+  release / prospectus; the info-completeness lever (supplements / pulling news facts into 1.01)
+  is separate from this structural fix. Minor polish: the two agreements can both self-define as
+  "(the \"Agreement\")" in body prose (the qualifier/index now name them specifically).
+Server restarted + HTTP health-checked after the `draft.py`/`api.py` edits.
+
 ## Full RR exhibit set downloaded for multi-exhibit testing (2026-07-22)
 For the testing/compare phase we replicate real Richtech filings from SEC (the eventual product
 lets users upload their own docs). Generalized the EX-99-only `download_rr_supplements.py` into

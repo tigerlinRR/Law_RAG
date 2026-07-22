@@ -260,16 +260,29 @@ discusses; and it is conservative about 2.01 — it will not suggest "completion
 purchase agreement that is only signed and will close later (a known failure mode of some
 cloud rivals).
 
-**Multiple documents, multiple Items in one filing.** Real 8-Ks bundle several Items and
-often several documents (a contract *and* a press release). The Generate tab accepts **one or
-more files** — each becomes a card whose detected Item(s) are pre-checked — and the user
-routes each document to the Item(s) it covers. `draft.draft_filing` drafts each *substantive*
-Item from its source document, drafts **news Items 7.01 / 8.01 from a press release** (`.txt`
-supported) and furnishes it as **Exhibit 99.1**, and auto-fills recognized *cross-reference*
-Items (e.g. 3.02 → 1.01, 2.01/2.03 → 1.01) with the standard "incorporated by reference"
-boilerplate (no LLM, no fabrication). Every Item runs the numeric guardrail + narrative audit
-against *its* source. All sections render into one filing (cover → each Item → merged 9.01
-exhibit index → signature).
+**Multiple documents per Item, multiple Items in one filing.** Real 8-Ks bundle several Items
+and several documents — often **more than one document per Item** (Item 1.01 from a Securities
+Purchase Agreement *and* a Registration Rights Agreement; Item 8.01 from two press releases).
+The Generate tab accepts **one or more files** — each becomes a card whose detected Item(s) are
+pre-checked — and the user routes each document to the Item(s) it covers (`routing` is
+`item → one or more documents`). `draft.draft_filing`:
+- **Contract Item from several agreements:** drafts each agreement (each guardrail-checked
+  against its own source), then merges — the substantive bodies are spliced under **one** (c)
+  material-relationship statement and **one** combined qualifier citing all their exhibits
+  ("descriptions of the *Purchase Agreement* and *Registration Rights Agreement* … Exhibits 10.1
+  and 10.2").
+- **News Item from several press releases:** one paragraph each, furnished as **99.1, 99.2, …**.
+- **Cross-reference Items** (3.02 → 1.01, 2.01/2.03 → 1.01): the "incorporated by reference"
+  boilerplate (no LLM, no fabrication).
+
+Documents are numbered by role — agreements/instruments → 10.1, 10.2, …; press releases →
+99.1, 99.2, … — and the **Item 9.01 exhibit index is built from the actual documents supplied**
+(each named specifically, e.g. "Registration Rights Agreement") in SEC exhibit-number order + the
+104 cover-page XBRL. Every Item runs the numeric guardrail + narrative audit against *its* source;
+all safety signals merge to the filing level. `.txt` input is supported (press releases are often
+plain text). *(Registered-offering facts that live outside the agreement — share count, exemption,
+net proceeds, placement agent — come from the press release / prospectus or a reviewer supplement,
+not the "Form of" contract.)*
 
 ```bash
 # Tag historical 8-Ks with their Item number(s) at ingest (auto-detected, or manual

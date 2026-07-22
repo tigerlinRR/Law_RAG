@@ -158,12 +158,13 @@ def _instrument_noun(disclosure: str) -> str:
     return noun or "Agreement"
 
 
-def _ensure_exhibit_qualifier(disclosure: str) -> str:
+def _ensure_exhibit_qualifier(disclosure: str, exhibit_no: str = "10.1") -> str:
     """Every real 8-K Item disclosure closes with the standard 'qualified in its entirety by
     reference to the full text ... Exhibit 10.1' sentence, referring to the INSTRUMENT. The
     model usually writes it, but (a) sometimes drops it, and (b) sometimes anchors it to a
     PARTY role when the agreement has no defined term (e.g. 'description of the Purchaser') —
-    fix both. It's fixed boilerplate, not a fact, so needs no source citation."""
+    fix both. `exhibit_no` is the exhibit this instrument is filed as (10.1, 10.2, ...). It's
+    fixed boilerplate, not a fact, so needs no source citation."""
     noun = _instrument_noun(disclosure)
     if re.search(r"qualified in (?:its )?entirety", disclosure, re.I):
         # The model occasionally drops "its" ("qualified in entirety"); normalize so the
@@ -184,8 +185,8 @@ def _ensure_exhibit_qualifier(disclosure: str) -> str:
     qualifier = (
         f"The foregoing description of the {noun} does not purport to be complete and "
         f"is qualified in its entirety by reference to the full text of such {noun}, a "
-        f"copy of which is filed as Exhibit 10.1 to this Current Report on Form 8-K and "
-        f"is incorporated herein by reference."
+        f"copy of which is filed as Exhibit {exhibit_no} to this Current Report on Form 8-K "
+        f"and is incorporated herein by reference."
     )
     return disclosure.rstrip() + "\n\n" + qualifier
 
@@ -823,22 +824,23 @@ _NEWS_SYSTEM = (
     "8-K and is incorporated herein by reference.' Return just the disclosure text.")
 
 
-def _draft_news(item: str, source_text: str) -> str:
+def _draft_news(item: str, source_text: str, exhibit_no: str = "99.1") -> str:
     """Draft a news/event Item (7.01/8.01) from a press release. The model summarizes the
     announcement; the numeric guardrail + narrative audit still run against this source, so no
-    figure/claim outside the document survives. The document is furnished as Exhibit 99.1."""
+    figure/claim outside the document survives. The document is furnished as `exhibit_no`
+    (99.1 by default; a filing with several press releases numbers them 99.1, 99.2, ...)."""
     noun = "press release"
     try:
-        out = llm.chat_json(_NEWS_SYSTEM.replace("{noun}", noun),
+        out = llm.chat_json(_NEWS_SYSTEM.replace("{noun}", noun).replace("99.1", exhibit_no),
                             f"=== SOURCE DOCUMENT ===\n{source_text[:CONFIG.llm_max_ctx_chars]}",
                             _NEWS_SCHEMA, max_tokens=1500)
         disc = (out.get("disclosure") or "").strip()
     except Exception:
         disc = ""
-    if "exhibit 99.1" not in disc.lower():
+    if f"exhibit {exhibit_no}" not in disc.lower():
         disc = (disc + "\n\n" if disc else "") + (
-            f"A copy of the {noun} is furnished as Exhibit 99.1 to this Current Report on Form "
-            "8-K and is incorporated herein by reference.")
+            f"A copy of the {noun} is furnished as Exhibit {exhibit_no} to this Current Report "
+            "on Form 8-K and is incorporated herein by reference.")
     return disc
 
 
@@ -874,6 +876,7 @@ def draft_8k(
     allowed_clients: list[str] | None = None,
     exclude_document_ids: list[int] | None = None,
     mode: str = "hybrid",
+    exhibit_no: str | None = None,
 ) -> dict:
     """Draft an 8-K Item disclosure for `contract_path`, grounded in facts extracted
     from that contract.
@@ -889,12 +892,15 @@ def draft_8k(
     any figure not grounded verbatim (incl. correct-but-derived ones) for human review."""
     item_title = ITEM_TITLES.get(item, "")
     precedent_citations: list[str] = []
+    # Exhibit this Item's source is filed/furnished as: news -> 99.1, contract -> 10.1 by
+    # default; a multi-document filing passes 10.2 / 99.2 / ... explicitly.
+    exhibit_no = exhibit_no or ("99.1" if item in NEWS_ITEMS else "10.1")
 
     if item in NEWS_ITEMS:
-        # News/event Item (7.01/8.01): summarize the press release; source attached as 99.1.
+        # News/event Item (7.01/8.01): summarize the press release; source furnished as exhibit_no.
         from .parsers import parse as _parse
         full_text = "\n\n".join(b.text for b in _parse(Path(contract_path)))
-        result = {"disclosure": _draft_news(item, full_text), "facts_used": []}
+        result = {"disclosure": _draft_news(item, full_text, exhibit_no), "facts_used": []}
         review = {"_full_text": full_text, "parties": [], "clauses": [],
                   "doc_type": "", "summary": "", "_derived": []}
     elif mode == "delex":
@@ -959,7 +965,7 @@ def draft_8k(
         _counterparty = _pick_counterparty(review.get("parties", []), load_registrant().get("name"))
         disc = _ensure_material_relationship(disc, _counterparty)
     if item in CONTRACT_ITEMS:  # news Items reference Exhibit 99.1, not the 10.1 qualifier
-        disc = _ensure_exhibit_qualifier(disc)
+        disc = _ensure_exhibit_qualifier(disc, exhibit_no)
     full_text = review.get("_full_text", "")
     if mode == "hybrid":
         # HYBRID (default): keep the model's prose but HARD-LOCK figures — any number it
@@ -1070,59 +1076,179 @@ def _route_items(sources: list[Path], items: list[str]) -> dict[str, Path]:
     return routing
 
 
-def _build_exhibits(items: list[str]) -> list[dict]:
-    """The Item 9.01 exhibit index for the selected Items: 10.1 for contract Items, 99.1 for a
-    news/press-release Item, and the standard 104 cover-page XBRL. (Registered-offering exhibits
-    like 5.1 opinion / 23.1 consent are supplied by the reviewer when applicable.)"""
-    ex = []
-    if any(i in CONTRACT_ITEMS for i in items):
-        ex.append({"number": "10.1", "description": "Agreement"})  # export refines with type/date
-    if any(i in NEWS_ITEMS for i in items):
-        ex.append({"number": "99.1", "description": "Press release"})
+_CLOSING_RE = re.compile(r"(?:Other than in respect of|The foregoing description)", re.I)
+_C_STATEMENT_RE = re.compile(r"Other than in respect of[^\n]*?material relationship[^\n]*?\.")
+_AGREEMENT_NAME_RE = re.compile(r"entered into (?:a |an |the )?([A-Z][A-Za-z]+(?: [A-Z][A-Za-z]+)*? Agreement)\b")
+
+
+def _agreement_name(disclosure: str) -> str:
+    """The SPECIFIC agreement name for the exhibit index / combined qualifier — e.g.
+    'Registration Rights Agreement', not the generic 'Agreement' that `_instrument_noun`
+    falls back to when several agreements each define themselves as '(the "Agreement")'."""
+    m = _AGREEMENT_NAME_RE.search(disclosure)
+    if m and 2 <= len(m.group(1).split()) <= 5:
+        return m.group(1).strip()
+    return _instrument_noun(disclosure)
+
+
+def _strip_closing(disclosure: str) -> str:
+    """The substantive body of a contract disclosure — everything before the (c) material-
+    relationship statement / the exhibit qualifier. Used to splice several agreements' bodies
+    into one Item 1.01 without duplicating the closing boilerplate."""
+    m = _CLOSING_RE.search(disclosure)
+    return (disclosure[:m.start()] if m else disclosure).rstrip()
+
+
+def _combined_qualifier(nouns: list[str], exhibit_nos: list[str]) -> str:
+    """The closing 'qualified in its entirety' sentence covering ONE OR MORE agreements —
+    singular for one (e.g. Exhibit 10.1), plural when an Item bundles several (e.g. a Purchase
+    Agreement AND a Registration Rights Agreement filed as Exhibits 10.1 and 10.2)."""
+    if len(nouns) == 1:
+        return (f"The foregoing description of the {nouns[0]} does not purport to be complete "
+                f"and is qualified in its entirety by reference to the full text of such "
+                f"{nouns[0]}, a copy of which is filed as Exhibit {exhibit_nos[0]} to this "
+                f"Current Report on Form 8-K and is incorporated herein by reference.")
+    noun_list = " and ".join(nouns) if len(nouns) == 2 else \
+        ", ".join(nouns[:-1]) + ", and " + nouns[-1]
+    ex_list = " and ".join(exhibit_nos) if len(exhibit_nos) == 2 else \
+        ", ".join(exhibit_nos[:-1]) + ", and " + exhibit_nos[-1]
+    return (f"The foregoing descriptions of the {noun_list} do not purport to be complete and "
+            f"are qualified in their entirety by reference to the full text of such documents, "
+            f"copies of which are filed as Exhibits {ex_list} to this Current Report on Form "
+            f"8-K and are incorporated herein by reference.")
+
+
+def _merge_item_drafts(drafts: list[dict], disclosure: str) -> dict:
+    """Collapse the per-document drafts of ONE Item into a single result dict carrying the
+    combined `disclosure` and the UNION of every safety signal (guardrail items, narrative
+    flags, blanked figures, facts, grounded facts, source text, derived values) so nothing a
+    reviewer must see is dropped when an Item is drafted from several documents."""
+    base = dict(drafts[0])
+    base["disclosure"] = disclosure
+    g_items, blocked, nf, blanked, facts, gf, src, dv = [], False, [], [], [], [], [], []
+    for r in drafts:
+        g = r.get("_guardrail") or {}
+        g_items.extend(g.get("items", []))
+        blocked = blocked or g.get("verdict") == "blocked"
+        nf.extend(r.get("_narrative_flags") or [])
+        blanked.extend(r.get("_blanked_figures") or [])
+        facts.extend(r.get("facts_used") or [])
+        if r.get("_grounded_facts"):
+            gf.append(r["_grounded_facts"])
+        if r.get("_source_text"):
+            src.append(r["_source_text"])
+        dv.extend(r.get("_derived_values") or [])
+    base["_guardrail"] = {"verdict": "blocked" if blocked else "clean", "items": g_items}
+    base["_narrative_flags"] = nf
+    base["_blanked_figures"] = blanked
+    base["facts_used"] = facts
+    base["_grounded_facts"] = "\n\n".join(gf)
+    base["_source_text"] = "\n\n".join(src)
+    base["_derived_values"] = dv
+    return base
+
+
+def _exhibit_sort_key(num: str) -> tuple:
+    m = re.match(r"(\d+)(?:\.(\d+))?", num)
+    return (int(m.group(1)), int(m.group(2) or 0)) if m else (9999, 0)
+
+
+def _build_exhibits(entries: list[dict]) -> list[dict]:
+    """The Item 9.01 exhibit index from the ACTUAL documents supplied (each {number,
+    description}), in SEC exhibit-number order, plus the standard 104 cover-page XBRL.
+    Dedupes by number. Registered-offering exhibits a reviewer adds separately (5.1 opinion /
+    23.1 consent) slot in by their number if supplied."""
+    by_num: dict[str, dict] = {}
+    for e in entries:
+        by_num.setdefault(e["number"], e)
+    ex = [by_num[n] for n in sorted(by_num, key=_exhibit_sort_key)]
     ex.append({"number": "104",
                "description": "Cover Page Interactive Data File (embedded within the Inline "
                               "XBRL document)"})
     return ex
 
 
+def _assign_exhibit_nos(routing: dict[str, list]) -> dict:
+    """Assign each source document an exhibit number by role and first-seen order: contract-
+    family documents -> 10.1, 10.2, …; news/press-release documents -> 99.1, 99.2, …. A doc
+    that feeds several Items keeps ONE number."""
+    contract_docs, news_docs = [], []
+    for it in routing:
+        bucket = news_docs if it in NEWS_ITEMS else contract_docs
+        for p in routing[it]:
+            if p not in bucket:
+                bucket.append(p)
+    exmap: dict = {}
+    for i, p in enumerate(contract_docs, 1):
+        exmap[p] = f"10.{i}"
+    for i, p in enumerate(news_docs, 1):
+        exmap[p] = f"99.{i}"
+    return exmap
+
+
 def draft_filing(sources: "str | Path | list", items: list[str],
                  allowed_clients: list[str] | None = None,
-                 routing: dict[str, "str | Path"] | None = None) -> dict:
-    """Draft a multi-Item 8-K from ONE OR MORE source documents.
+                 routing: dict[str, object] | None = None) -> dict:
+    """Draft a multi-Item, multi-DOCUMENT 8-K from one or more source documents.
 
-    `sources` is a single path or a list of paths (contract + press release + …). Each Item is
-    routed to the document that triggers it (see _route_items): contract-family Items draft from
-    the agreement via clause extraction; news Items (7.01/8.01) summarize a press release with it
-    furnished as Exhibit 99.1. Recognized cross-reference Items (e.g. 3.02 -> 1.01) get the
-    standard 'incorporated by reference' boilerplate (no LLM). Returns one result whose top-level
-    fields carry the PRIMARY substantive Item, plus `_items` (ordered sections) and `_exhibits`
-    (the merged 9.01 index). Guardrails from all substantive Items are merged."""
+    `sources` is a single path or a list (contract + registration rights agreement + press
+    releases + …). `routing` maps each Item to the document(s) it is drafted from — a single
+    path or a LIST of paths per Item (the UI's confirmed doc→Item assignment; falls back to
+    per-document auto-detection). An Item drafted from several agreements (e.g. Item 1.01 from a
+    Securities Purchase Agreement AND a Registration Rights Agreement) merges their bodies under
+    one (c) statement + one combined qualifier citing all their exhibits; a news Item with
+    several press releases emits one paragraph each, furnished as 99.1, 99.2, …. Recognized
+    cross-reference Items (3.02 → 1.01) get the 'incorporated by reference' boilerplate (no LLM).
+    Returns one result: top-level fields carry the PRIMARY Item, plus `_items` (ordered sections)
+    and `_exhibits` (the full 9.01 index from the actual documents). Safety signals from every
+    substantive Item and document are merged."""
     if isinstance(sources, (str, Path)):
         sources = [sources]
     sources = [Path(s) for s in sources]
     items = _filing_order(items) or ["1.01"]
-    # Explicit routing (item -> source) from the UI (the user confirmed which document covers
-    # which Item) takes precedence; otherwise auto-route by per-document detection.
+    # Normalize routing to item -> list[Path]. Explicit UI routing wins; else auto-detect.
     if routing:
-        routing = {it: Path(p) for it, p in routing.items()}
+        routing = {it: [Path(p) for p in (v if isinstance(v, (list, tuple)) else [v])]
+                   for it, v in routing.items()}
     else:
-        routing = _route_items(sources, items)
+        routing = {it: [p] for it, p in _route_items(sources, items).items()}
+    exmap = _assign_exhibit_nos(routing)
+
     sections: list[dict] = []
     substantive: list[tuple[str, dict]] = []
+    exhibit_entries: list[dict] = []
     for it in items:
         title = ITEM_TITLES.get(it, "")
         comp = _cross_ref_companion(it, items)
         if comp:
             sections.append({"item": it, "item_title": title,
                              "disclosure": _cross_ref_text(it, comp), "cross_ref": True})
+            continue
+        docs = routing.get(it) or [sources[0]]
+        drafts = [draft_8k(d, item=it, allowed_clients=allowed_clients,
+                           exhibit_no=exmap.get(d)) for d in docs]
+        if it in NEWS_ITEMS:
+            disclosure = "\n\n".join(r.get("disclosure", "") for r in drafts)
+            for d, r in zip(docs, drafts):
+                exhibit_entries.append({"number": exmap.get(d, "99.1"),
+                                        "description": "Press release"})
         else:
-            r = draft_8k(routing.get(it, sources[0]), item=it, allowed_clients=allowed_clients)
-            substantive.append((it, r))
-            sections.append({"item": it, "item_title": r.get("item_title", title),
-                             "disclosure": r.get("disclosure", ""), "cross_ref": False})
+            bodies = [_strip_closing(r.get("disclosure", "")) for r in drafts]
+            nouns = [_agreement_name(r.get("disclosure", "")) for r in drafts]
+            cm = _C_STATEMENT_RE.search(drafts[0].get("disclosure", ""))
+            parts = bodies + ([cm.group(0)] if cm else [])
+            parts.append(_combined_qualifier(nouns, [exmap.get(d, "10.1") for d in docs]))
+            disclosure = "\n\n".join(p for p in parts if p)
+            for d, noun in zip(docs, nouns):
+                exhibit_entries.append({"number": exmap.get(d, "10.1"), "description": noun})
+        item_result = _merge_item_drafts(drafts, disclosure)
+        substantive.append((it, item_result))
+        sections.append({"item": it, "item_title": item_result.get("item_title", title),
+                         "disclosure": disclosure, "cross_ref": False})
     if not substantive:  # degenerate (only cross-ref Items selected): draft the first
         it = items[0]
-        r = draft_8k(routing.get(it, sources[0]), item=it, allowed_clients=allowed_clients)
+        r = draft_8k((routing.get(it) or [sources[0]])[0], item=it,
+                     allowed_clients=allowed_clients)
         substantive.append((it, r))
         for s in sections:
             if s["item"] == it:
@@ -1130,14 +1256,16 @@ def draft_filing(sources: "str | Path | list", items: list[str],
 
     primary_item, primary = substantive[0]
     result = dict(primary)
-    merged, blocked = [], False
+    g_items, blocked, nf = [], False, []
     for _, r in substantive:
         g = r.get("_guardrail") or {}
-        merged.extend(g.get("items", []))
+        g_items.extend(g.get("items", []))
         blocked = blocked or g.get("verdict") == "blocked"
-    result["_guardrail"] = {"verdict": "blocked" if blocked else "clean", "items": merged}
+        nf.extend(r.get("_narrative_flags") or [])
+    result["_guardrail"] = {"verdict": "blocked" if blocked else "clean", "items": g_items}
+    result["_narrative_flags"] = nf
     result["_items"] = sections
-    result["_exhibits"] = _build_exhibits(items)
+    result["_exhibits"] = _build_exhibits(exhibit_entries)
     result["item"] = primary_item
     result["item_title"] = ITEM_TITLES.get(primary_item, "")
     return result

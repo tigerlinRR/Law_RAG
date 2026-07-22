@@ -244,7 +244,7 @@ async def api_generate_8k(files: list[UploadFile] = File(...),
             saved.append((uf.filename or dest.name, dest))
         by_name = {name: path for name, path in saved}
 
-        routing: dict[str, Path] = {}
+        routing: dict[str, list[Path]] = {}
         sel: list[str] = []
         for a in assign:
             p = by_name.get(a.get("filename"))
@@ -252,7 +252,11 @@ async def api_generate_8k(files: list[UploadFile] = File(...),
                 continue
             for it in a.get("items", []):
                 if it in ITEM_TITLES:
-                    routing[it] = p
+                    # accumulate: one Item can be drafted from SEVERAL documents (e.g. Item
+                    # 1.01 from a purchase agreement AND a registration rights agreement).
+                    routing.setdefault(it, [])
+                    if p not in routing[it]:
+                        routing[it].append(p)
                     if it not in sel:
                         sel.append(it)
         if not sel:  # legacy / single-doc: global items on the first file, auto-route
@@ -265,7 +269,7 @@ async def api_generate_8k(files: list[UploadFile] = File(...),
         auth.log(user["username"], "generate_8k",
                  f"items {','.join(sel)}: {', '.join(by_name)}")
         r = draft_filing([p for _, p in saved], sel, allowed_clients=allowed,
-                         routing={it: str(p) for it, p in routing.items()} or None)
+                         routing={it: [str(p) for p in ps] for it, ps in routing.items()} or None)
         gen_id = generations.save("8k_draft", r, source_name=saved[0][0],
                                   client=canonical, item=r.get("item", sel[0]),
                                   created_by=user["username"])
