@@ -758,6 +758,31 @@ collided. Fixed in `draft.draft_filing`'s multi-agreement contract branch (only 
   2nd with "In connection with the Purchase Agreement, the Company also entered into …". Left as
   optional polish.)
 
+## Registrant defined-term consistency — always "the Company" (2026-07-23)
+Two real held-out PSAs (2025-04-08 L&R / 031633 and 2026-04-01 EBS Rainbow / 041153) showed the
+same defect on the default `hybrid` path: the model gave the registrant an inconsistent/undefined
+term. EBS defined it as `(the "Purchaser")` then used undefined "the Company" in the (c)/FLS;
+L&R introduced NO defined terms at all yet used both "the Company" and "the Purchaser". Fixed at
+two layers (facts unchanged; guardrail stays the fact authority):
+- **Prompt (`_SYSTEM` rule 9):** the registrant is "the Company" — introduce it once by full legal
+  name + `(the "Company")` and use only that, NEVER its contract role (Purchaser/Buyer/Borrower/
+  Issuer/Lessee/…); define the counterparty/agreement/property on first use and reuse those terms.
+- **Deterministic backstop `_normalize_registrant_term(disclosure, company_name)`** (wired into
+  `draft_8k` for `CONTRACT_ITEMS`, before the (c)/qualifier post-processing): ANCHORED on the
+  registrant's actual NAME (never a bare role word, so the counterparty's role is never touched).
+  If the name is bound to a party-role term (`Richtech… (the "Purchaser")`) it standardizes that
+  definition to `(the "Company")` and renames every `the/The X` + `X's` reference; if the name has
+  no defined term it inserts `(the "Company")` after the name/appositive. No-op when already
+  "Company" (so `assemble` mode, which already defines it, is untouched).
+- **Verified E2E (fresh generation, both PSAs):** registrant now defined once as `(the "Company")`
+  and used throughout, `(the "Seller")`/`(the "Property")`/`(the "Agreement")` all defined, ZERO
+  stray registrant-role aliases, guardrail CLEAN, 0 narrative flags. Server restarted + HTTP 200
+  after the `draft.py` edit. (Note: L&R's stray-alias cleanup came from the prompt — the
+  deterministic layer intentionally does NOT blind-rename an unbound role word, since it can't
+  prove such a word refers to the registrant vs the counterparty.)
+- Remaining cosmetic (unchanged, optional): exhibit description could add the parties + a 601(a)(5)
+  omitted-annexes footnote; signature date = event date vs the real filing's later filing date.
+
 ## Key locations
 - **8-K drafting engine**: `lawrag/draft.py` (ITEM_CHECKLISTS, ITEM_RULES w/ materiality
   rubric, _compliance_flags, add_business_context, FLS legend). Facts always via RAG,

@@ -187,7 +187,15 @@ fill the gaps.** Split of concerns: extraction = facts, code/prompt + rubric = s
 
    Every disclosed fact is cited back to its verbatim quote in `facts_used`; the standard
    "qualified in its entirety by reference to Exhibit 10.1" closing is guaranteed exactly
-   once (de-dup tolerates the model dropping "its"). Every citation (here and in the
+   once (de-dup tolerates the model dropping "its"). **Defined terms are kept consistent:**
+   the registrant always reads as **"the Company"** — introduced once by its full legal name
+   followed by `(the "Company")` and used throughout, never by its contract role (the model
+   otherwise sometimes writes "the Purchaser"/"the Borrower"). A deterministic pass
+   (`_normalize_registrant_term`) **anchored on the registrant's actual name** renames a role
+   term the model bound to that name and inserts the `(the "Company")` definition if it was
+   omitted — so the *counterparty's* own role term is never touched. (When several agreements
+   merge into one Item, each gets a distinct term — "Purchase Agreement" vs "Registration Rights
+   Agreement" — so the merged prose never defines "the Agreement" twice.) Every citation (here and in the
    due-diligence engine's clause quotes) is checked programmatically against the source text
    (`summarize.verify_quote`) — a citation not found verbatim is flagged `⚠ UNVERIFIED` rather
    than silently trusted. The check is **ellipsis-aware**: a quote that elides non-contiguous

@@ -249,6 +249,52 @@ def _ensure_material_relationship(disclosure: str, counterparty: str | None = No
         return disclosure[:idx].rstrip() + "\n\n" + stmt + "\n\n" + disclosure[idx:]
     return disclosure.rstrip() + "\n\n" + stmt
 
+
+# Party-role tokens a contract may use for the REGISTRANT (the buyer/debtor/tenant side).
+# In an 8-K the registrant is conventionally "the Company"; the model sometimes adopts the
+# contract's role for it instead (e.g. "the Purchaser"), leaving an inconsistent/undefined
+# term. We normalize the registrant's OWN defined term to "the Company".
+_REGISTRANT_ROLE_TERMS = {
+    "purchaser", "purchasers", "buyer", "borrower", "issuer", "lessee", "tenant",
+    "mortgagor", "grantee", "licensee", "acquirer", "acquiror", "obligor", "maker",
+}
+
+
+def _normalize_registrant_term(disclosure: str, company_name: str | None) -> str:
+    """8-K convention: the registrant is "the Company". The model sometimes introduces it by
+    its CONTRACT role — e.g. `Richtech Robotics Inc. (the "Purchaser")` — or omits a definition
+    while still using "the Company", producing an inconsistent/undefined term. Guarantee the
+    registrant is defined once as (the "Company") and referred to as such. ANCHORED on the
+    registrant's actual NAME (never on a bare role word), so the counterparty's own role term
+    is never touched; only a role bound directly to the registrant's name is renamed."""
+    if not company_name or not company_name.strip():
+        return disclosure
+    name = company_name.strip().rstrip(".")
+    pat = re.compile(
+        re.escape(name) + r"\.?"
+        r"(?P<appos>,\s+an?\s+[A-Z][A-Za-z ]+?(?:corporation|company))?"
+        r"(?P<def>\s*\((?:the )?[“”\"](?P<term>[^“”\"]+)[“”\"]\))?",
+        re.IGNORECASE)
+    m = pat.search(disclosure)
+    if not m:
+        return disclosure
+    term = (m.group("term") or "").strip()
+    if not term:
+        # No defined term at first mention -> insert (the "Company") after the name/appositive.
+        at = m.end("appos") if m.group("appos") else m.end(0)
+        return disclosure[:at] + " (the “Company”)" + disclosure[at:]
+    if term.lower() == "company":
+        return disclosure  # already correct
+    # Registrant bound to a non-"Company" defined term: standardize its definition, and if it
+    # is a party-role token, rename every reference (the/The X, X's) to the Company as well.
+    disclosure = disclosure.replace(m.group("def"), " (the “Company”)", 1)
+    if term.lower() in _REGISTRANT_ROLE_TERMS:
+        disclosure = re.sub(r"\b(the|The)\s+" + re.escape(term) + r"\b",
+                            lambda mm: mm.group(1) + " Company", disclosure)
+        disclosure = re.sub(re.escape(term) + r"(['’])s\b", r"Company\1s", disclosure)
+    return disclosure
+
+
 # Field bounds keep the (verbose) 8-K style model from overrunning max_tokens and
 # truncating the JSON mid-string. A real Item disclosure is 1-3 tight paragraphs.
 DRAFT_SCHEMA = {
@@ -334,7 +380,16 @@ _SYSTEM = (
     "for redacted counterparties — e.g. 'with one of the largest retailers in the world (the "
     "\"Client\")' rather than naming a redacted counterparty. If no natural generic "
     "description is available from the other facts, use a bare defined term like "
-    "'a third party (the \"Client\")' with no further description."
+    "'a third party (the \"Client\")' with no further description.\n"
+    "9. DEFINED TERMS — introduce each once, then use consistently. The REGISTRANT (the "
+    "company making this filing) is \"the Company\": introduce it once by its full legal name "
+    "followed by (the \"Company\") and refer to it ONLY as \"the Company\" everywhere else — "
+    "NEVER by its role in the contract (never 'the Purchaser', 'the Buyer', 'the Borrower', "
+    "'the Issuer', 'the Lessee', etc.). Give the counterparty, the agreement, and any other key "
+    "subject a defined term the FIRST time each appears — e.g. (the \"Seller\"), (the "
+    "\"Purchase and Sale Agreement\"), (the \"Property\") — and use exactly those terms "
+    "thereafter. Do not use a 'the X' term you have not defined, and never define the same "
+    "term twice."
 )
 
 # Mandatory SEC disclosure requirements per Item (Form 8-K rules + the materiality
@@ -965,11 +1020,13 @@ def draft_8k(
     result["item"] = item
     result["item_title"] = item_title
     disc = result.get("disclosure", "")
-    if item == "1.01":
-        from .export import load_registrant  # lazy: avoid a circular import at module load
-        _counterparty = _pick_counterparty(review.get("parties", []), load_registrant().get("name"))
-        disc = _ensure_material_relationship(disc, _counterparty)
     if item in CONTRACT_ITEMS:  # news Items reference Exhibit 99.1, not the 10.1 qualifier
+        from .export import load_registrant  # lazy: avoid a circular import at module load
+        _registrant = load_registrant().get("name")
+        disc = _normalize_registrant_term(disc, _registrant)  # 8-K convention: registrant = "the Company"
+        if item == "1.01":
+            _counterparty = _pick_counterparty(review.get("parties", []), _registrant)
+            disc = _ensure_material_relationship(disc, _counterparty)
         disc = _ensure_exhibit_qualifier(disc, exhibit_no)
     full_text = review.get("_full_text", "")
     # Ground against the source contract AND any related filing documents (press releases)
