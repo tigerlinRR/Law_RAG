@@ -323,19 +323,23 @@ Richtech's own real filings:**
   redaction marker as a safety net.
 - **Forward-Looking Statements legend.** Only 3 of Richtech's 17 real Item 1.01
   filings carry the PSLRA safe-harbor "Forward-Looking Statements" paragraph — always
-  tied to the disclosure itself containing forward-looking language about the
-  Company's own future plans/beliefs (e.g. "the Company intends to utilize..."),
-  never added by default. The drafting step checks the finished disclosure for
-  that kind of self-referential future-intent phrasing and, if present, appends
-  Richtech's own verbatim legend as its own labeled section between the Item
+  because a human added a forward-looking view of the deal, never by default. The
+  legend is attached to a draft **only when a reviewer supplies a business-context
+  note** (see the box below); it appears as its own labeled section between the Item
   disclosure and Item 9.01 — matching where real filings place it.
+  - The drafting step itself **never** adds the legend, even when the disclosure
+    recites forward-looking-*sounding* deal mechanics ("the closing is expected to
+    occur…", a press release's "the Company intends to use the proceeds…"). Those are
+    grounded present/near-term facts, not the Company's own projections, and real
+    filings routinely carry them without a body legend (it lives in the press-release
+    exhibit). The gate is the presence of a reviewer note, not disclosure phrasing —
+    so a draft is never given a safe-harbor legend the reviewer didn't ask for.
   - Checked against the real contracts behind those 3 filings: the forward-looking
     phrasing (e.g. "a strategic ... facility for warehousing, assembly and light
     manufacturing") never appears in the contract itself — it's business/strategic
     context a human adds from outside knowledge of the Company's plans, which by
-    definition no document-grounded extraction can produce. So the drafting step
-    on its own will rarely trigger this legend (correctly — it isn't inventing
-    strategy it wasn't given). Instead, the **web UI has a "Business / strategic
+    definition no document-grounded extraction can produce. That is exactly why the
+    legend is gated on reviewer input: the **web UI has a "Business / strategic
     context" box** on every draft (Generate 8-K and History) where legal or
     management can describe that context in a sentence or two; `draft.
     add_business_context` merges it into the disclosure's opening paragraph at the

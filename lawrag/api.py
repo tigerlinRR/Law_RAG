@@ -28,7 +28,7 @@ from . import auth, clients, db, export, generations, guardrail
 from .config import ROOT
 from .draft import (ITEM_TITLES, _FIGURE_PLACEHOLDER, _FORWARD_LOOKING_STATEMENTS,
                     _TRACE_BOILERPLATE, _compliance_flags, _narrative_flags,
-                    _needs_forward_looking_statements, add_business_context, detect_items,
+                    add_business_context, detect_items,
                     draft_8k, draft_filing, verify_quote)
 from .ingest import DocMeta, ingest_file
 from .parsers import NeedsOCR
@@ -349,7 +349,10 @@ def _recompute_verification(result: dict) -> None:
     result["_blanked_figures"] = [_FIGURE_PLACEHOLDER] * target.count(_FIGURE_PLACEHOLDER)
     result["_compliance"] = _compliance_flags(result.get("item", ""),
                                               result.get("disclosure", ""))
-    if _needs_forward_looking_statements(result.get("disclosure", "")):
+    # FLS legend is present iff a reviewer added a business-context note (their own
+    # forward-looking view); never driven by disclosure phrasing. Kept in sync so a
+    # reverify/supplement neither drops it (when context exists) nor adds it.
+    if result.get("_business_context_note"):
         result["_forward_looking_statements"] = _FORWARD_LOOKING_STATEMENTS
     else:
         result.pop("_forward_looking_statements", None)

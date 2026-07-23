@@ -712,6 +712,30 @@ filter. Both are in the repo (pushed). **RTX handoff (tables + commands): `train
 - **Scoped AMBER (guardrail Option B)** — wire the rubric→keyword mapping so omissions of
   MUST-disclose fields surface as AMBER (still non-blocking). See [[guardrail-red-only]].
 
+## FLS legend now gated on reviewer business context, not disclosure phrasing (2026-07-23)
+Comparing our generated draft of the 2026-01-30 private placement (Draft (8)) against the real
+filing (009823), the draft carried a Forward-Looking Statements legend the real filing's 8-K body
+did NOT. Root cause: the FLS gate was CONTENT-driven — `_needs_forward_looking_statements` regex-
+matched forward-looking-*sounding* deal mechanics in the drafted disclosure ("the closing **is
+expected to** occur…", the 8.01's press-release-derived "the Company **intends to** use the
+proceeds…") and attached the legend. Those are grounded present/near-term facts, not the Company's
+own projections; the user's intent is that the legend appears ONLY when a human supplies a
+forward-looking view via the business-context box. Fixed to option 2 (user chose):
+- **Removed the content-based trigger** (`_FLS_TRIGGER_RE` + `_needs_forward_looking_statements`
+  deleted from `draft.py`; import dropped from `api.py`). `draft_8k` no longer auto-adds the
+  legend from disclosure phrasing.
+- **Gate is now `_business_context_note`.** `add_business_context` still sets the legend (unchanged
+  — that IS the reviewer adding a future view). `api._recompute_verification` (reverify/supplements)
+  now keeps the legend iff `_business_context_note` is present, so an edit can neither drop it (when
+  context exists) nor add it from phrasing.
+- Verified: a fresh draft reciting "…is expected to occur…" carries NO FLS; the api gate returns
+  FLS_OFF without a note and FLS_ON with one. Server restarted + HTTP 200 after the
+  `draft.py`/`api.py` edits. Docs (README.md + README.zh-CN.md FLS section) updated in lockstep.
+- (Same compare surfaced a separate real defect NOT yet fixed: in a merged multi-agreement 1.01,
+  the SPA and RRA can BOTH self-define as `(the "Agreement")` in body prose — defined-term
+  collision. The (c)/qualifier/index already name them specifically; the body-prose collision is
+  the open polish item.)
+
 ## Key locations
 - **8-K drafting engine**: `lawrag/draft.py` (ITEM_CHECKLISTS, ITEM_RULES w/ materiality
   rubric, _compliance_flags, add_business_context, FLS legend). Facts always via RAG,

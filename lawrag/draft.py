@@ -398,13 +398,16 @@ ITEM_RULES: dict[str, str] = {
 }
 
 
-# Richtech includes this exact safe-harbor legend (verbatim, unchanged across every
-# real filing that needs it) whenever an Item disclosure contains forward-looking
-# language about the Company's own future plans/beliefs -- as opposed to simply
-# reciting the agreement's terms, which is a statement of present/historical fact and
-# does not require it. Only 3 of Richtech's 17 real Item 1.01 filings have it, always
-# tied to the disclosure itself using forward-looking phrasing (e.g. "the Company
-# intends to...", "we believe will...", "with the aim of..."), never added by default.
+# This exact safe-harbor legend (verbatim, unchanged across every real filing that
+# needs it) is attached ONLY when a reviewer supplies a business-context note -- their
+# own forward-looking view of the deal -- via add_business_context. That is: the filing
+# gains the legend because a human added a forward-looking statement, not because the
+# drafted disclosure happens to recite forward-looking-SOUNDING deal mechanics ("the
+# closing is expected to occur...", a press release's "intends to use the proceeds...").
+# Those are grounded present/near-term facts, not the Company's own projections, and
+# real filings routinely carry them WITHOUT a body legend (it lives in the press-release
+# exhibit). Gate = presence of `_business_context_note`; the legend is never added by
+# default nor inferred from disclosure phrasing.
 _FORWARD_LOOKING_STATEMENTS = (
     "This Current Report on Form 8-K includes “forward-looking statements” "
     "within the meaning of Section 27A of the Securities Act and Section 21E of the "
@@ -431,23 +434,6 @@ _FORWARD_LOOKING_STATEMENTS = (
     "update these statements for revisions or changes after the date of this "
     "release, except as required by law."
 )
-
-# Narrower than the boilerplate's own word list (which includes generic modals like
-# "may"/"could"/"would" that appear constantly in plain contract-mechanics prose,
-# e.g. "the Purchaser may terminate") -- this only matches phrasing that asserts the
-# COMPANY's own future plans, intent, or belief, which is what actually triggered the
-# legend in Richtech's own real filings.
-_FLS_TRIGGER_RE = re.compile(
-    r"\b(intends? to|plans? to|expects? to|is expected to|anticipates? that|"
-    r"we believe|the company believes?|aims? to|with the aim of|will serve as|"
-    r"designed to (?:support|further)|in order to support)\b",
-    re.IGNORECASE,
-)
-
-
-def _needs_forward_looking_statements(disclosure: str) -> bool:
-    return bool(_FLS_TRIGGER_RE.search(disclosure))
-
 
 def _parse_amount(text: str) -> Decimal | None:
     """Pull the first numeric amount from an extracted value ('$4.55', '$38,675,000.00',
@@ -997,8 +983,9 @@ def draft_8k(
         # imagined figure survives. The reviewer then fills the placeholders.
         disc, result["_blanked_figures"] = _lock_figures(disc, ground_text, review.get("_derived"))
     result["disclosure"] = disc
-    if _needs_forward_looking_statements(result["disclosure"]):
-        result["_forward_looking_statements"] = _FORWARD_LOOKING_STATEMENTS
+    # The FLS legend is NOT auto-added here: a fresh draft that merely recites forward-
+    # looking-sounding deal mechanics does not carry it. It is attached only when a
+    # reviewer supplies a business-context note (see add_business_context).
     result["_compliance"] = _compliance_flags(item, result["disclosure"])
     result["_repaired"] = review.get("_repaired")  # count of verify-gated 2nd-pass repairs
     # Fact-fidelity guardrail on the (figure-locked) disclosure.
