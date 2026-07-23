@@ -1131,6 +1131,56 @@ def _combined_qualifier(nouns: list[str], exhibit_nos: list[str]) -> str:
             f"8-K and are incorporated herein by reference.")
 
 
+# The defined term a contract body attaches to its agreement, e.g. the generic
+# `... Agreement (the "Agreement")`. Captured so several agreements merged into one
+# Item can each be given a DISTINCT term (they were drafted alone and all self-define
+# as "Agreement" -> a defined-term collision in the merged prose).
+_AGREEMENT_TERM_RE = re.compile(r'\bAgreement\s*\((?:the )?[“”"]([^“”"]+)[“”"]\)')
+
+
+def _short_agreement_term(name: str) -> str:
+    """A concise, distinctive defined term for an agreement, mirroring real-filing usage:
+    a Securities Purchase Agreement -> 'Purchase Agreement'; a Registration Rights
+    Agreement -> 'Registration Rights Agreement'. Otherwise the specific name is already
+    distinctive enough to stand as the defined term."""
+    low = name.lower()
+    if "purchase" in low:
+        return "Purchase Agreement"
+    if "registration rights" in low:
+        return "Registration Rights Agreement"
+    return name.strip()
+
+
+def _distinct_agreement_terms(nouns: list[str]) -> list[str]:
+    """Distinct defined terms for the agreements bundled into one Item: short forms if
+    they don't collide, else the full specific names, else numbered as a last resort."""
+    terms = [_short_agreement_term(n) for n in nouns]
+    if len(set(terms)) == len(terms):
+        return terms
+    if len(set(nouns)) == len(nouns):
+        return list(nouns)
+    return [f"{n} (No. {i + 1})" for i, n in enumerate(nouns)]
+
+
+def _rename_agreement_term(body: str, target: str) -> str:
+    """Rewrite a contract body's agreement defined term (the definition `(the "X")` AND
+    every `the X` reference) to `target`, so agreements merged into one Item don't all
+    define the same term. Only the agreement's own term is touched — the full agreement
+    name ('...Purchase Agreement') and other defined terms (Company, Purchasers, Shares)
+    are left intact (they aren't preceded by 'the'/quoted as the agreement term)."""
+    m = _AGREEMENT_TERM_RE.search(body)
+    if not m:
+        return body
+    current = m.group(1).strip()
+    if not current or current == target:
+        return body
+    body = re.sub(r'([“”"])' + re.escape(current) + r'([“”"])',
+                  lambda mm: mm.group(1) + target + mm.group(2), body)
+    body = re.sub(r'\b(the|The)\s+' + re.escape(current) + r'\b',
+                  lambda mm: mm.group(1) + " " + target, body)
+    return body
+
+
 def _merge_item_drafts(drafts: list[dict], disclosure: str) -> dict:
     """Collapse the per-document drafts of ONE Item into a single result dict carrying the
     combined `disclosure` and the UNION of every safety signal (guardrail items, narrative
@@ -1330,9 +1380,24 @@ def draft_filing(sources: "str | Path | list", items: list[str],
         else:
             bodies = [_strip_closing(r.get("disclosure", "")) for r in drafts]
             nouns = [_agreement_name(r.get("disclosure", "")) for r in drafts]
+            ex_nos = [exmap.get(d, "10.1") for d in docs]
             cm = _C_STATEMENT_RE.search(drafts[0].get("disclosure", ""))
-            parts = bodies + ([cm.group(0)] if cm else [])
-            parts.append(_combined_qualifier(nouns, [exmap.get(d, "10.1") for d in docs]))
+            c_stmt = cm.group(0) if cm else None
+            if len(bodies) >= 2:
+                # Several agreements in one Item: each was drafted alone and self-defines
+                # as (the "Agreement") -> collision. Give each a DISTINCT defined term, and
+                # make the shared closing refer to them collectively (the exhibit index keeps
+                # the full formal names). The qualifier uses the same terms as the bodies.
+                terms = _distinct_agreement_terms(nouns)
+                bodies = [_rename_agreement_term(b, t) for b, t in zip(bodies, terms)]
+                if c_stmt:
+                    c_stmt = re.sub(
+                        r"(Other than in respect of )the .*?(,? there is no material relationship)",
+                        r"\1the foregoing agreements\2", c_stmt)
+            else:
+                terms = nouns
+            parts = bodies + ([c_stmt] if c_stmt else [])
+            parts.append(_combined_qualifier(terms, ex_nos))
             disclosure = "\n\n".join(p for p in parts if p)
             for d, noun in zip(docs, nouns):
                 exhibit_entries.append({"number": exmap.get(d, "10.1"), "description": noun})

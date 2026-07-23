@@ -731,10 +731,32 @@ forward-looking view via the business-context box. Fixed to option 2 (user chose
 - Verified: a fresh draft reciting "…is expected to occur…" carries NO FLS; the api gate returns
   FLS_OFF without a note and FLS_ON with one. Server restarted + HTTP 200 after the
   `draft.py`/`api.py` edits. Docs (README.md + README.zh-CN.md FLS section) updated in lockstep.
-- (Same compare surfaced a separate real defect NOT yet fixed: in a merged multi-agreement 1.01,
-  the SPA and RRA can BOTH self-define as `(the "Agreement")` in body prose — defined-term
-  collision. The (c)/qualifier/index already name them specifically; the body-prose collision is
-  the open polish item.)
+- (Same compare surfaced a separate real defect — the merged-agreement defined-term collision —
+  now FIXED in the next section.)
+
+## Multi-agreement 1.01 defined-term collision fixed (2026-07-23)
+The same 009823 compare showed the merged Item 1.01 body defining BOTH the SPA and the RRA as
+`(the "Agreement")` — each agreement is drafted alone by `draft_8k` (self-defining as "Agreement")
+and then spliced, so the merged prose had two conflicting definitions of one term. The (c)
+statement / combined qualifier / exhibit index already named them specifically, but the body prose
+collided. Fixed in `draft.draft_filing`'s multi-agreement contract branch (only when `len(docs) >=
+2`; single-agreement drafting untouched):
+- `_distinct_agreement_terms(nouns)` picks a distinct defined term per agreement — real-filing
+  short forms (Securities Purchase Agreement → "Purchase Agreement"; Registration Rights Agreement
+  → "Registration Rights Agreement"), falling back to full specific names then numbering if they'd
+  collide. `_rename_agreement_term(body, target)` rewrites that body's `(the "Agreement")` definition
+  AND every `the/The Agreement` reference to the target, leaving the full agreement name and other
+  defined terms (Company, Purchasers, Shares) intact.
+- The shared (c) statement now reads "Other than in respect of **the foregoing agreements**, …"; the
+  combined qualifier uses the SAME short terms as the bodies; the 9.01 index keeps the full formal
+  names.
+- **Verified E2E on the real 009823 filing (SPA+RRA→1.01):** body now defines "(the \"Purchase
+  Agreement\")" and "(the \"Registration Rights Agreement\")", zero `(the "Agreement")` collisions,
+  guardrail CLEAN, 0 narrative flags. Server restarted + HTTP 200 after the `draft.py` edit.
+- (Remaining cosmetic, not fixed: the 2nd agreement's paragraph still re-introduces "Richtech
+  Robotics Inc. … (the \"Company\")" — a harmless same-entity re-definition; real filings open the
+  2nd with "In connection with the Purchase Agreement, the Company also entered into …". Left as
+  optional polish.)
 
 ## Key locations
 - **8-K drafting engine**: `lawrag/draft.py` (ITEM_CHECKLISTS, ITEM_RULES w/ materiality
