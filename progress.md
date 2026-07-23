@@ -783,6 +783,25 @@ two layers (facts unchanged; guardrail stays the fact authority):
 - Remaining cosmetic (unchanged, optional): exhibit description could add the parties + a 601(a)(5)
   omitted-annexes footnote; signature date = event date vs the real filing's later filing date.
 
+## Merged multi-agreement Item — no duplicate shared definitions (2026-07-23)
+Reviewing a fresh private-placement draft (Draft (11)) for legal hand-off: the merged Item 1.01
+defined `(the "Company")` and `(the "Purchasers")` TWICE — each agreement is drafted alone by
+`draft_8k` (each body opens "…Richtech Robotics Inc., a Nevada corporation (the "Company"), entered
+into…") and then spliced, so the 2nd body re-introduced the registrant + shared terms. A lawyer
+flags "term defined twice" immediately. Fixed GENERALLY in `draft_filing`'s ≥2-agreement branch
+(structure-keyed, not document-specific):
+- `_dedup_shared_definitions(body, prior_terms, first_term)` rewrites each 2nd+ body: the opening
+  registrant re-introduction (`_REINTRO_RE`) becomes "In connection with the <first agreement>,
+  [on <date>,] the Company also entered into …", and any `(the "X")` for a term already defined in
+  an earlier body (Company, Purchasers, …) is dropped. `_defined_terms(body)` collects the terms;
+  the loop accumulates `seen` across bodies so a term is defined exactly once.
+- Runs AFTER `_rename_agreement_term`, so each agreement's own distinct term (Purchase Agreement /
+  Registration Rights Agreement) is preserved while shared terms de-dup.
+- **Verified E2E on the real 009823 SPA+RRA:** `(the "Company")` ×1, `(the "Purchasers")` ×1,
+  `(the "Agreement")` collisions 0, 2nd agreement opens "In connection with the Purchase Agreement,
+  … the Company also entered into …", guardrail CLEAN, 0 narrative flags. Server restarted +
+  HTTP 200 after the `draft.py` edit.
+
 ## Key locations
 - **8-K drafting engine**: `lawrag/draft.py` (ITEM_CHECKLISTS, ITEM_RULES w/ materiality
   rubric, _compliance_flags, add_business_context, FLS legend). Facts always via RAG,

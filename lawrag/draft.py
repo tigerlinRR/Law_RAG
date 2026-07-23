@@ -1238,6 +1238,38 @@ def _rename_agreement_term(body: str, target: str) -> str:
     return body
 
 
+def _defined_terms(body: str) -> list[str]:
+    """The defined terms a body introduces, e.g. ['Company', 'Purchase Agreement',
+    'Purchasers'] from each `(the "X")`."""
+    return re.findall(r'\((?:the\s+)?[“”"]([^“”"]+)[“”"]\)', body)
+
+
+# Opening re-introduction of the registrant in a later agreement's body, e.g.
+# 'On January 27, 2026, Richtech Robotics Inc., a Nevada corporation (the "Company"),
+# entered into '. When several agreements merge into one Item, every body opens this way,
+# re-defining (the "Company") each time; the 2nd+ are rewritten to connect to the first.
+_REINTRO_RE = re.compile(
+    r'^\s*(?:On\s+(?P<date>[A-Z][a-z]+\s+\d{1,2},\s+\d{4}),?\s+)?'
+    r'.*?\(\s*(?:the\s+)?[“”"]Company[“”"]\s*\),?\s+entered into\s+',
+    re.IGNORECASE)
+
+
+def _dedup_shared_definitions(body: str, prior_terms: set, first_term: str) -> str:
+    """A later agreement's body (2nd+ in a merged Item) re-introduces the registrant and
+    re-defines terms the first body already defined (Company, Purchasers, …) -> duplicate
+    defined terms. Rewrite the opening to connect to the first agreement ('In connection
+    with the <first_term>, … the Company also entered into …') and DROP any `(the "X")`
+    redefinition of a term already defined earlier, so each term is defined exactly once."""
+    def _repl(m: "re.Match") -> str:
+        date = m.group("date")
+        lead = f"In connection with the {first_term}, "
+        return lead + (f"on {date}, " if date else "") + "the Company also entered into "
+    body = _REINTRO_RE.sub(_repl, body, count=1)
+    for t in prior_terms:
+        body = re.sub(r'\s*\((?:the\s+)?[“”"]' + re.escape(t) + r'[“”"]\)', "", body)
+    return body
+
+
 def _merge_item_drafts(drafts: list[dict], disclosure: str) -> dict:
     """Collapse the per-document drafts of ONE Item into a single result dict carrying the
     combined `disclosure` and the UNION of every safety signal (guardrail items, narrative
@@ -1447,6 +1479,13 @@ def draft_filing(sources: "str | Path | list", items: list[str],
                 # the full formal names). The qualifier uses the same terms as the bodies.
                 terms = _distinct_agreement_terms(nouns)
                 bodies = [_rename_agreement_term(b, t) for b, t in zip(bodies, terms)]
+                # Each body was drafted alone and re-introduces the registrant + shared
+                # terms (Company, Purchasers) the first body already defined. Rewrite the
+                # 2nd+ bodies to connect to the first agreement and not redefine those terms.
+                seen = set(_defined_terms(bodies[0]))
+                for i in range(1, len(bodies)):
+                    bodies[i] = _dedup_shared_definitions(bodies[i], seen, terms[0])
+                    seen.update(_defined_terms(bodies[i]))
                 if c_stmt:
                     c_stmt = re.sub(
                         r"(Other than in respect of )the .*?(,? there is no material relationship)",

@@ -195,7 +195,10 @@ fill the gaps.** Split of concerns: extraction = facts, code/prompt + rubric = s
    term the model bound to that name and inserts the `(the "Company")` definition if it was
    omitted — so the *counterparty's* own role term is never touched. (When several agreements
    merge into one Item, each gets a distinct term — "Purchase Agreement" vs "Registration Rights
-   Agreement" — so the merged prose never defines "the Agreement" twice.) Every citation (here and in the
+   Agreement" — so the merged prose never defines "the Agreement" twice; and each later agreement's
+   body is rewritten to connect to the first ("In connection with the Purchase Agreement, … the
+   Company also entered into …") instead of re-introducing the registrant and re-defining shared
+   terms, so every defined term appears exactly once.) Every citation (here and in the
    due-diligence engine's clause quotes) is checked programmatically against the source text
    (`summarize.verify_quote`) — a citation not found verbatim is flagged `⚠ UNVERIFIED` rather
    than silently trusted. The check is **ellipsis-aware**: a quote that elides non-contiguous
