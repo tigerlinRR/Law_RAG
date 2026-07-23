@@ -5,9 +5,9 @@ Living status doc so a fresh chat can resume fast. Pairs with:
   `MEMORY.md` index; the dense history is in `law-rag-project-plan.md`).
 - **`CLAUDE.md`** (points here) and the repo `README.md` (product/architecture docs).
 
-_Last updated: 2026-07-17._
+_Last updated: 2026-07-22._
 
-## ⭐ CURRENT STATE (2026-07-17) — READ THIS FIRST
+## ⭐ CURRENT STATE (2026-07-22) — READ THIS FIRST
 **Architecture is SETTLED (v1-spine): the model UNDERSTANDS/extracts, CODE generates,
 the guardrail backstops, humans fill gaps. Facts never come from model weights.**
 - **Served model:** the PLAIN BASE `qwen3.6` (container `lawrag-llm`, :8012). The v2 style
@@ -15,20 +15,36 @@ the guardrail backstops, humans fill gaps. Facts never come from model weights.*
   for transaction Items — both dead ends, kept only for history). `.env LLM_MODEL=qwen3.6`.
 - **Default drafting = `draft_8k(mode="hybrid")`**: base model drafts in 8-K style →
   `_lock_figures` blanks ungrounded numbers → numeric guardrail (RED blocks fabrication) →
-  `_narrative_flags` (#6, review-only, flags invented non-numeric claims). `assemble` = optional
-  fully-deterministic mode.
-- **Shipped & working (all this on the base model, no training):** extraction repair pass;
-  open-ended "other material terms" extraction (any contract type); company-neutral data-derived
-  materiality rubric; supplements/gap-fill UX; registrant profile as an editable admin input
-  (`registrant.json` + Company web tab); auto-detect triggered Items on upload (suggest+confirm,
-  by document role); **multi-document filing** (contract + press release + …, user routes each
-  doc→Item; news Items 7.01/8.01 furnish the press release as Exhibit 99.1; merged exhibit index);
-  `.txt` input.
+  `_narrative_flags` (#6, review-only + per-claim confirm pass to kill false positives). `assemble`
+  = optional fully-deterministic mode.
+- **Multi-document, multi-Item filing is the primary flow (`draft.draft_filing`).** User (future:
+  upload UI; now: SEC-downloaded RR docs) hands in an exhibit set; the tool drafts a complete 8-K:
+  - **One Item, several documents** — Item 1.01 merges a Securities Purchase Agreement + a
+    Registration Rights Agreement under one (c) statement + one combined qualifier ("Exhibits 10.1
+    and 10.2"); a news Item emits one paragraph per press release furnished as 99.1, 99.2, ….
+  - **Full Item 9.01 exhibit index** from the ACTUAL documents, incl. **index-only** exhibits a
+    filing lists but doesn't draft from — securities instruments **4.x** (warrant descriptions read
+    from the doc, "Form of Common Warrant"), opinion **5.1**, consent **23.1**. Numbered from the
+    filename (`…EX-4.1…`) / UI / role-auto.
+  - **Detection** routes an agreement to **1.01 (primary)** + any secondary Item; a doc tagged to a
+    cross-ref Item (3.02) is redirected into its substantive companion (1.01), never dropped.
+  - **Item 1.01 absorbs related-filing facts:** the press-release text is passed as grounded
+    context, so a share count / offering size / gross proceeds the "Form of" agreement omits enters
+    1.01 as a grounded fact (verified CLEAN). (Model pulls context facts conservatively — exemption
+    / placement agent not always included; can nudge the prompt if fuller inclusion is wanted.)
+- **Also shipped (base model, no training):** verify-gated extraction repair; open-ended
+  "other material terms" extraction; company-neutral data-derived materiality rubric; supplements/
+  gap-fill UX; editable registrant profile (`registrant.json` + Company web tab); `.txt` input;
+  business-context box → merges into Item 1.01 opening + auto Forward-Looking-Statements legend
+  (verbatim-identical to Richtech's real legend), synced into the `_items` sections.
+- **Quality nets:** figure guardrail; ellipsis-aware `verify_quote`; boilerplate ((c)/qualifier)
+  kept out of the fact→source trace; qualifier de-dup (tolerates dropped "its").
 - **NEXT:** #4 — per-customer **few-shot style** (facts-stripped exemplars from the customer's own
-  past 8-Ks) so drafts read like that filer wrote them; then deepen extraction. NO fine-tuning.
+  past 8-Ks); deepen extraction; optionally nudge 1.01 to include exemption + placement agent. NO
+  fine-tuning.
 - **Run:** LLM = Docker `lawrag-llm` on :8012; web = manual `./.venv/bin/python scripts/serve.py`
-  on :8080 (restart + HTTP-verify after any `lawrag/*.py` edit). Full design report:
-  `8K_DRAFTING_FINDINGS_REPORT.md`.
+  on :8080 (restart + HTTP-verify after any `lawrag/*.py` edit). SEC test-corpus downloader:
+  `scripts/download_rr_exhibits.py`. Full design report: `8K_DRAFTING_FINDINGS_REPORT.md`.
 - Sections below this are the DATED HISTORY of how we got here (adapter/delex era included) —
   context, not current instructions.
 
